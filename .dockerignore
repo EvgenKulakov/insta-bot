@@ -1,0 +1,6 @@
+.venv
+.idea
+.git
+.gitignore
+added-libraries.txt
+*.cpython-312.pyc

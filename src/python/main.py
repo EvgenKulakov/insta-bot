@@ -1,20 +1,38 @@
 import instaloader
+from instaloader import Profile
+
 
 def download():
+    USER = 'svetlanabeautifulmorning'
+    TOKEN = '/home/evgeniy/PycharmProjects/insta-bot/session-token'
     L = instaloader.Instaloader()
-    L.login('evgeniy-k123456789@protonmail.com', 'insta54535251')
+    L.load_session_from_file(USER, TOKEN)
 
-    # Укажите имя пользователя
-    username = 'maga_isma'
+    username = 'anichkina_a'
+    profile = Profile.from_username(L.context, username)
 
-    # Скачайте сторис
-    L.download_stories(username)
+    # L.download_stories(userids=[profile.userid], filename_target='cache')
+    # stories = L.get_stories([profile.userid])
+    #
+    # for story in stories:
+    #     print(story)
+    #     print(dir(story))
+    #     story_items = story.get_items()
+    #     for item in story_items:
+    #         print(item)
+    #         print(dir(item))
+    #         L.download_storyitem(item, f'cache.{username}')
+    #     print('****************************************')
 
-    # Путь к скачанным сторис
-    stories_path = f"./{username}/stories"
+    posts = profile.get_posts()
+    first_post = next(posts)
+    print(first_post)
+    print(dir(first_post))
+    print('*********************************')
 
-    # Вывод информации
-    print(f"Сторис пользователя {username} успешно скачаны в папку {stories_path}")
+    L.download_post(first_post, f'cache.{username}')
+
+    print("Сторис загружены успешно!")
 
 
 download()

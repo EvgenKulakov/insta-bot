@@ -1,14 +1,15 @@
-import telebot
-from telebot import types
+from telebot import telebot, types
+from telebot.types import Message
 import configparser
 import insta_loader
 from utils import valid_username
+from dtos import ProfileResponse
 
 properties = configparser.ConfigParser()
 properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
 
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
-LOADER = insta_loader.Loader(properties)
+LOADER = insta_loader.Loader(properties, BOT)
 
 
 @BOT.message_handler(commands=['start'])
@@ -20,40 +21,68 @@ def read_start(message):
 def read_message(message):
     username = message.text.lower().strip()
     if valid_username(username):
-        response = LOADER.set_profile_from_username(username)
-        if response.type == 'private':
-            photo = open(response.avatar_path, 'rb')
-            BOT.send_photo(message.chat.id, photo, caption=response.text_message, parse_mode='HTML')
-        if response.type == 'no_stories':
-            photo = open(response.avatar_path, 'rb')
-            markup = types.InlineKeyboardMarkup()
-            text_data = f'query_{LOADER.PROFILE.userid}'
-            markup.add(types.InlineKeyboardButton(text='Сделать новый запрос', callback_data=text_data))
-            BOT.send_photo(message.chat.id, photo, caption=response.text_message,
-                           parse_mode='HTML', reply_markup=markup)
-        if response.type == 'has_stories':
-            photo = open(response.avatar_path, 'rb')
-            markup = types.InlineKeyboardMarkup()
-            text_data = f'analyze_{LOADER.PROFILE.userid}'
-            markup.add(types.InlineKeyboardButton(text='Прошерстить', callback_data=text_data))
-            BOT.send_photo(message.chat.id, photo, caption=response.text_message,
-                           parse_mode='HTML', reply_markup=markup)
-        if response.type == 'error':
-            BOT.send_message(message.chat.id, text=response.text_message)
+        status_bar = BOT.send_message(message.chat.id, text='Делаю запрос...')
+        response = LOADER.set_profile_from_username(username, status_bar)
+        query_handler(response, message)
     else:
-        BOT.send_message(message.chat.id, text=f'❌ "{message.text}" - некорректный nickname')
+        BOT.send_message(message.chat.id, text=f'❌ "{message.text}" - некорректный никнейм')
+
+
+@BOT.callback_query_handler(func=lambda call: call.data.startswith('query'))
+def query(callback_query):
+    status_bar = BOT.send_message(callback_query.message.chat.id, text='Делаю запрос...')
+    profile_id = int(callback_query.data.split('_')[1])
+    response = LOADER.set_profile_from_id(profile_id, status_bar)
+    query_handler(response, callback_query.message)
+
+
+def query_handler(response: ProfileResponse, message: Message):
+    if response.type == 'private':
+        with open(response.avatar_path, 'rb') as photo:
+            BOT.send_photo(message.chat.id, photo, caption=response.text_message, parse_mode='HTML')
+    if response.type == 'no_stories':
+        markup = types.InlineKeyboardMarkup()
+        text_data = f'query_{LOADER.PROFILE.userid}'
+        markup.add(types.InlineKeyboardButton(text='Сделать новый запрос', callback_data=text_data))
+        with open(response.avatar_path, 'rb') as photo:
+            BOT.send_photo(message.chat.id, photo, caption=response.text_message,
+                           parse_mode='HTML', reply_markup=markup)
+    if response.type == 'has_stories':
+        markup = types.InlineKeyboardMarkup()
+        text_data = f'analyze_{LOADER.PROFILE.userid}'
+        markup.add(types.InlineKeyboardButton(text='Прошерстить', callback_data=text_data))
+        with open(response.avatar_path, 'rb') as photo:
+            BOT.send_photo(message.chat.id, photo, caption=response.text_message,
+                           parse_mode='HTML', reply_markup=markup)
+    if response.type == 'error':
+        BOT.send_message(message.chat.id, text=response.text_message)
 
 
 @BOT.callback_query_handler(func=lambda call: call.data.startswith('analyze'))
 def analyze(callback_query):
     profile_id = int(callback_query.data.split('_')[1])
-    LOADER.download_stories(profile_id)
+    status_bar = BOT.send_message(callback_query.message.chat.id, text='Загружаю сторис...')
+    response = LOADER.download_stories(profile_id, status_bar)
+    if response:
+        for resp_item in response:
+            if resp_item.content == 'photo':
+                with open(resp_item.path, 'rb') as photo:
+                    BOT.send_photo(callback_query.message.chat.id, photo)
+            if resp_item.content == 'video':
+                with open(resp_item.path, 'rb') as video:
+                    BOT.send_video(callback_query.message.chat.id, video)
+    else:
+        text_message = 'У данного аккаунта сейчас нет актуальных сторис, попробуй прошерстить его позже'
+        BOT.send_message(callback_query.message.chat.id, text=text_message)
 
-
-@BOT.callback_query_handler(func=lambda call: call.data.startswith('query'))
-def query(callback_query):
-    profile_id = int(callback_query.data.split('_')[1])
-    print(profile_id)
+    markup = types.InlineKeyboardMarkup()
+    text_data = f'query_{profile_id}'
+    markup.add(types.InlineKeyboardButton(text='Сделать новый запрос', callback_data=text_data))
+    BOT.edit_message_reply_markup(
+        chat_id=callback_query.message.chat.id,
+        message_id=callback_query.message.message_id,
+        reply_markup=markup
+    )
 
 
 BOT.polling(none_stop=True)

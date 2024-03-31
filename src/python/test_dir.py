@@ -1,12 +1,9 @@
-import os
+from dtos import StoryResponse
 
-target_folder = '/home/evgeniy/PycharmProjects/insta-bot/cache/morgen'
+story_dtos = []
 
-if not os.path.exists(target_folder):
-    os.makedirs(target_folder)
+story_dtos.append(StoryResponse('video', '.mp4'))
 
-file_path = os.path.join(target_folder, "some.jpg")
-print(file_path)
+story_dtos.append(StoryResponse('photo', '.jpg'))
 
-with open(file_path + '.temp', 'wb') as file:
-    print('all good')
+print(story_dtos)

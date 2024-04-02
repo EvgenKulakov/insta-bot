@@ -12,10 +12,26 @@ class ProfileResponse:
         self.avatar_path = avatar_path
 
 
-class StoryResponse:
+class StoryData:
     content: str
     path: str
+    url: str
 
-    def __init__(self, content: str, path: str):
+    def __init__(self, content: str, path: str, url: str):
         self.content = content
         self.path = path
+        self.url = url
+
+
+class StoryResponse:
+    full_name: str
+    story_data_array: List[StoryData]
+    count_stories: int
+    count_viewed: int
+
+    def __init__(self, full_name: str, story_data_array: List[StoryData] | None,
+                 count_stories: int, count_viewed: int):
+        self.full_name = full_name
+        self.story_data_array = story_data_array
+        self.count_stories = count_stories
+        self.count_viewed = count_viewed

@@ -1,12 +1,12 @@
-from instaloader import Instaloader, Profile, ProfileNotExistsException, Story
+from instaloader import Instaloader, Profile, ProfileNotExistsException, Story, StoryItem
 from telebot import TeleBot
 from telebot.types import Message
 from configparser import ConfigParser
 import os
 from datetime import datetime
-from dtos import ProfileResponse, StoryResponse
+from dtos import ProfileResponse, StoryData, StoryResponse
 from utils import create_profile_text
-from typing import List
+from typing import Iterator
 
 
 class Loader:
@@ -70,10 +70,11 @@ class Loader:
 
         if not os.path.isfile(avatar_path):
             self.INSTALOADER.context.write_raw(resp, avatar_path)
+            print()
 
         return ProfileResponse(type_response, text_message, avatar_path)
 
-    def download_stories(self, profile_id: int, message: Message) -> List[StoryResponse] | None:
+    def download_stories(self, profile_id: int, message: Message) -> StoryResponse | None:
         status_bar = message.text
         if not self.PROFILE or self.PROFILE.userid != profile_id or not self.STORY:
             if not self.PROFILE or self.PROFILE.userid != profile_id:
@@ -89,44 +90,64 @@ class Loader:
             if self.STORY and self.STORY.itemcount > 0:
                 status_bar = status_bar.replace('Поиск сторис', '✅ Сторис найдены')
             else:
-                status_bar = status_bar.replace('Поиск сторис', '❌ Сторис не найдены')
+                status_bar = status_bar.replace('Поиск сторис', 'Сторис не найдены ❌')
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 return None
-
-        count_downloads = 0
-        status_bar += f'\nЗагружено [{count_downloads}/{self.STORY.itemcount}]'
-        self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
         folder_stories = f'/home/evgeniy/PycharmProjects/insta-bot/cache/{self.PROFILE.username}/stories'
         if not os.path.exists(folder_stories):
             os.makedirs(folder_stories)
 
-        story_dtos = []
+        story_data_array = []
+        count_viewed = 0
 
-        for item in self.STORY.get_items():
-            filename = item.date_local.strftime('%d-%m-%Y_%H-%M-%S')
+        for item in self.get_items():
+            filename = item.date_local.strftime('%d-%m-%Y_%H-%M-%S') + f'_{str(message.chat.id)}'
             path = os.path.join(folder_stories, filename)
 
             if item.is_video:
                 if not os.path.isfile(path + '.mp4'):
-                    resp = self.INSTALOADER.context.get_raw(str(item.video_url))
-                    self.INSTALOADER.context.write_raw(resp, path + '.mp4')
-                    story_dtos.append(StoryResponse('video', path + '.mp4'))
-                    status_bar = status_bar.replace(f'[{count_downloads}/{self.STORY.itemcount}]',
-                                                    f'[{count_downloads + 1}/{self.STORY.itemcount}]')
-                    self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-                    count_downloads += 1
+                    story_data_array.append(StoryData('video', path + '.mp4', item.video_url))
+                else: count_viewed += 1
             else:
                 if not os.path.isfile(path + ".jpg"):
-                    resp = self.INSTALOADER.context.get_raw(str(item.url))
-                    self.INSTALOADER.context.write_raw(resp, path + '.jpg')
-                    story_dtos.append(StoryResponse('photo', path + '.jpg'))
-                    status_bar = status_bar.replace(f'[{count_downloads}/{self.STORY.itemcount}]',
-                                                    f'[{count_downloads + 1}/{self.STORY.itemcount}]')
-                    self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-                    count_downloads += 1
+                    story_data_array.append(StoryData('photo', path + '.jpg', item.url))
+                else: count_viewed += 1
 
+        count_downloads = 0
 
+        if count_viewed > 0:
+            status_bar += (f'\n\nАктуальных сторис: {self.STORY.itemcount}'
+                           f'\nУже просмотрено: {count_viewed}')
+            if story_data_array:
+                status_bar += f'\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
+            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
+            for story_data in story_data_array:
+                resp = self.INSTALOADER.context.get_raw(story_data.url)
+                self.INSTALOADER.context.write_raw(resp, story_data.path)
+                print()
+                status_bar = status_bar.replace(f'[{count_downloads}/{len(story_data_array)}]',
+                                                f'[{count_downloads + 1}/{len(story_data_array)}]')
+                self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+                count_downloads += 1
+        else:
+            status_bar += f'\n\nЗагружено: [{count_downloads}/{self.STORY.itemcount}]'
+            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+
+            for story_data in story_data_array:
+                resp = self.INSTALOADER.context.get_raw(story_data.url)
+                self.INSTALOADER.context.write_raw(resp, story_data.path)
+                print()
+                status_bar = status_bar.replace(f'[{count_downloads}/{self.STORY.itemcount}]',
+                                                f'[{count_downloads + 1}/{self.STORY.itemcount}]')
+                self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+                count_downloads += 1
+
+        response = StoryResponse(self.PROFILE.full_name, story_data_array, self.STORY.itemcount, count_viewed)
         self.STORY = None
-        return story_dtos
+        return response
+
+    def get_items(self) -> Iterator[StoryItem]:
+        for item in self.STORY._node['items']:
+            yield StoryItem(self.STORY._context, item, self.STORY.owner_profile)

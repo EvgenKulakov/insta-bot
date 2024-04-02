@@ -63,26 +63,52 @@ def analyze(callback_query):
     profile_id = int(callback_query.data.split('_')[1])
     status_bar = BOT.send_message(callback_query.message.chat.id, text='Загружаю сторис...')
     response = LOADER.download_stories(profile_id, status_bar)
+    text_message: str
     if response:
-        for resp_item in response:
-            if resp_item.content == 'photo':
-                with open(resp_item.path, 'rb') as photo:
+        for story_data in response.story_data_array:
+            if story_data.content == 'photo':
+                with open(story_data.path, 'rb') as photo:
                     BOT.send_photo(callback_query.message.chat.id, photo)
-            if resp_item.content == 'video':
-                with open(resp_item.path, 'rb') as video:
+            if story_data.content == 'video':
+                with open(story_data.path, 'rb') as video:
                     BOT.send_video(callback_query.message.chat.id, video)
-    else:
-        text_message = 'У данного аккаунта сейчас нет актуальных сторис, попробуй прошерстить его позже'
-        BOT.send_message(callback_query.message.chat.id, text=text_message)
 
-    markup = types.InlineKeyboardMarkup()
-    text_data = f'query_{profile_id}'
-    markup.add(types.InlineKeyboardButton(text='Сделать новый запрос', callback_data=text_data))
-    BOT.edit_message_reply_markup(
-        chat_id=callback_query.message.chat.id,
-        message_id=callback_query.message.message_id,
-        reply_markup=markup
-    )
+        for story_data in response.story_data_array:
+            print(f'обнуление {story_data.path}')
+
+        if not response.story_data_array:
+            if response.count_stories == 1:
+                text_message = (f'<code>Инсташершень:</code>\n\n'
+                                f'У <b>{response.full_name}</b> сейчас одна актуальная сторис.\n'
+                                f'Я тебе уже отправлял эту сторис - попробуй прошерстить этот аккаунт позже')
+            else:
+                text_message = (f'<code>Инсташершень:</code>\n\n'
+                                f'У <b>{response.full_name}</b> {response.count_stories} актуальных сторис.\n'
+                                f'Я тебе уже отправлял все эти сторис - попробуй прошерстить этот аккаунт позже')
+        elif response.count_viewed > 0:
+            text_message = (f'<code>Инсташершень:</code>\n\n'
+                            f'У <b>{response.full_name}</b> {response.count_stories} актуальных сторис.\n'
+                            f'Я тебе отправил всего {len(response.story_data_array)} сторис, '
+                            f'т.к. другие я тебе отправлял ранее')
+        else:
+            text_message = (f'<code>Инсташершень:</code>\n\n'
+                            f'Все актуальные сторис <b>{response.full_name}</b> отправлены')
+        BOT.send_message(callback_query.message.chat.id, text=text_message, parse_mode='HTML')
+    else:
+        text_message = ('<code>Инсташершень:</code>\n\n'
+                        'У данного аккаунта сейчас нет актуальных сторис, попробуй прошерстить его позже')
+        BOT.send_message(callback_query.message.chat.id, text=text_message, parse_mode='HTML')
+
+    if callback_query.data.split('_')[0] == 'analyze':
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        btn1 = types.InlineKeyboardButton(text='Новый запрос', callback_data=f'query_{profile_id}')
+        btn2 = types.InlineKeyboardButton(text='Прошерстить', callback_data=f'analyzeNew_{profile_id}')
+        markup.add(btn1, btn2)
+        BOT.edit_message_reply_markup(
+            chat_id=callback_query.message.chat.id,
+            message_id=callback_query.message.message_id,
+            reply_markup=markup
+        )
 
 
 BOT.polling(none_stop=True)

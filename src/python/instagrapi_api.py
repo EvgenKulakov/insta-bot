@@ -32,6 +32,7 @@ class Loader:
                 self.CLIENT.login(username, password)
                 try:
                     self.CLIENT.get_timeline_feed()
+                    print('login okey')
                 except LoginRequired:
                     self.BOT.send_message(admin_id, 'Сессия instagrapi не валидна, будет попытка с uuids')
                     print("Session is invalid, need to login via username and password")

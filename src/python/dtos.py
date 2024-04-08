@@ -5,11 +5,13 @@ class ProfileResponse:
     type: str
     text_message: str
     avatar_path: str
+    user_id: str
 
-    def __init__(self, type: str, text_message: str, avatar_path: str | None = None):
+    def __init__(self, type: str, text_message: str, avatar_path: str | None = None, user_id: str | None = None):
         self.type = type
         self.text_message = text_message
         self.avatar_path = avatar_path
+        self.user_id = user_id
 
 
 class StoryData:

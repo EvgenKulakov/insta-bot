@@ -7,6 +7,7 @@ from datetime import datetime
 from dtos import ProfileResponse, StoryData, StoryResponse
 from utils import create_profile_text
 from typing import Iterator
+import time
 
 
 class Loader:
@@ -75,6 +76,7 @@ class Loader:
         return ProfileResponse(type_response, text_message, avatar_path)
 
     def download_stories(self, profile_id: int, message: Message) -> StoryResponse | None:
+        time_start = time.time()
         status_bar = message.text
         if not self.PROFILE or self.PROFILE.userid != profile_id or not self.STORY:
             if not self.PROFILE or self.PROFILE.userid != profile_id:
@@ -83,10 +85,14 @@ class Loader:
 
                 self.PROFILE = Profile.from_id(self.INSTALOADER.context, profile_id)
                 status_bar = status_bar.replace('Поиск аккаунта', '✅ Аккаунт найден')
+                print('Аккаунт найден')
+                print(time.time() - time_start)
             status_bar += '\nПоиск сторис'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
             self.STORY = next(self.INSTALOADER.get_stories([profile_id]))
+            print('INSTALOADER.get_storie')
+            print(time.time() - time_start)
             if self.STORY and self.STORY.itemcount > 0:
                 status_bar = status_bar.replace('Поиск сторис', '✅ Сторис найдены')
             else:
@@ -143,6 +149,8 @@ class Loader:
                                                 f'[{count_downloads + 1}/{self.STORY.itemcount}]')
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 count_downloads += 1
+
+        print(time.time() - time_start)
 
         response = StoryResponse(self.PROFILE.full_name, story_data_array, self.STORY.itemcount, count_viewed)
         self.STORY = None

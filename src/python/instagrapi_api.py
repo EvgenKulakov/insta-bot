@@ -1,3 +1,6 @@
+import datetime
+from datetime import timedelta, datetime
+
 from instagrapi import Client
 from instagrapi.exceptions import LoginRequired, UserNotFound
 from instagrapi.types import Story, User
@@ -5,21 +8,22 @@ from telebot import TeleBot
 from telebot.types import Message
 import os
 import time
-from typing import List
+from typing import List, Dict
 from configparser import ConfigParser
-from dtos import ProfileResponse
+from dtos import ProfileResponse, StoryResponse, StoryData
 from utils import create_user_text
 
 
 class Loader:
     CLIENT: Client
-    STORIES: List[Story]
     BOT: TeleBot
     PROPERTIES: ConfigParser
+    STORIES: List[Story]
     def __init__(self, properties: ConfigParser, BOT: TeleBot):
         self.CLIENT = Client()
         self.BOT = BOT
         self.PROPERTIES = properties
+        self.STORIES = None
 
         def sign_in_session():
             username = self.PROPERTIES['INSTAGRAM']['USER']
@@ -32,7 +36,7 @@ class Loader:
                 self.CLIENT.login(username, password)
                 try:
                     self.CLIENT.get_timeline_feed()
-                    print('login okey')
+                    self.BOT.send_message(admin_id, '✅ instagrapi login')
                 except LoginRequired:
                     self.BOT.send_message(admin_id, 'Сессия instagrapi не валидна, будет попытка с uuids')
                     print("Session is invalid, need to login via username and password")
@@ -93,6 +97,67 @@ class Loader:
         text_message = create_user_text(user, self.STORIES)
 
         return ProfileResponse(type_response, text_message, avatar_path, user.pk)
+
+    def download_stories(self, user_id: str, message: Message) -> StoryResponse | None:
+        if (not self.STORIES or len(self.STORIES) == 0 or self.STORIES[0].user.pk != user_id
+                or datetime.now() - self.STORIES[-1].taken_at >= timedelta(minutes=10)):
+
+            status_bar = message.text + '\n\nПоиск сторис'
+            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+            self.STORIES = self.CLIENT.user_stories(user_id)
+
+            if len(self.STORIES) > 0:
+                status_bar = status_bar.replace('Поиск сторис', '✅ Сторис найдены')
+                self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+            else:
+                status_bar = status_bar.replace('Поиск сторис', '❌ Сторис не найдены')
+                self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+                return None
+
+        folder_stories = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.STORIES[0].user.username}/stories"
+        if not os.path.exists(folder_stories):
+            os.makedirs(folder_stories)
+
+        story_data_array = []
+        count_viewed = 0
+
+        for story in self.STORIES:
+            filename = story.taken_at.strftime('%d-%m-%Y_%H-%M-%S') + f'_{str(message.chat.id)}'
+            path = os.path.join(folder_stories, filename)
+
+            if story.media_type == 2:
+                if not os.path.isfile(path + '.mp4'):
+                    story_data_array.append(StoryData('video', story.pk, path + '.mp4', filename))
+                else:
+                    count_viewed += 1
+            else:
+                if not os.path.isfile(path + ".jpg"):
+                    story_data_array.append(StoryData('photo', story.pk, path + '.jpg', filename))
+                else:
+                    count_viewed += 1
+
+        count_downloads = 0
+
+        if count_viewed > 0:
+            status_bar += (f'\n\nАктуальных сторис: {len(self.STORIES)}'
+                           f'\nУже просмотрено: {count_viewed}')
+            if story_data_array:
+                status_bar += f'\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
+            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+        else:
+            status_bar += f'\n\nЗагружено: [{count_downloads}/{len(self.STORIES)}]'
+            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+
+        for story_data in story_data_array:
+            self.CLIENT.story_download(story_data.story_pk, story_data.filename, folder_stories)
+            status_bar = status_bar.replace(f'[{count_downloads}/{len(story_data_array)}]',
+                                            f'[{count_downloads + 1}/{len(story_data_array)}]')
+            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+            count_downloads += 1
+
+        response = StoryResponse(self.STORIES[0].user.full_name, story_data_array, len(self.STORIES), count_viewed)
+        self.STORIES = None
+        return response
 
 
 # def download():

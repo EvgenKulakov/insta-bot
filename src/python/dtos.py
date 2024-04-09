@@ -16,13 +16,15 @@ class ProfileResponse:
 
 class StoryData:
     content: str
+    story_pk: str
     path: str
-    url: str
+    filename: str
 
-    def __init__(self, content: str, path: str, url: str):
+    def __init__(self, content: str, story_pk: str, path: str, filename: str):
         self.content = content
+        self.story_pk = story_pk
         self.path = path
-        self.url = url
+        self.filename = filename
 
 
 class StoryResponse:

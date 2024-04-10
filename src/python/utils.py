@@ -44,7 +44,7 @@ def create_user_text(user: User, stories: List[instagrapi.types.Story]) -> str:
                   f'<pre>Комментарий инсташершня:</pre>\n')
     if user.is_private:
         return (f'{start_text}'
-                f'<b>{user.full_name}</b> - это закрытый профиль. Сторисы для просмотра недоступны')
+                f'<b>{user.full_name}</b> - это закрытый профиль. Сторисы недоступны для просмотра')
     if len(stories) == 0:
         return (f'{start_text}'
                 f'У <b>{user.full_name}</b> в данный момент нет актуальных сторис.\n'

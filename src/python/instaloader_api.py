@@ -1,3 +1,6 @@
+import configparser
+
+import telebot
 from instaloader import Instaloader, Profile, ProfileNotExistsException, Story, StoryItem
 from telebot import TeleBot
 from telebot.types import Message
@@ -152,3 +155,9 @@ class Loader:
     def get_items(self) -> Iterator[StoryItem]:
         for item in self.STORY._node['items']:
             yield StoryItem(self.STORY._context, item, self.STORY.owner_profile)
+
+def all_load():
+    properties = configparser.ConfigParser()
+    properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
+    loader = Loader(properties, telebot.TeleBot(properties['TELEGRAM']['BOT']))
+    loader.INSTALOADER.download_profile('username')

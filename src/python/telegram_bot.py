@@ -1,3 +1,5 @@
+import time
+
 from telebot import telebot, types
 from telebot.types import Message
 import configparser
@@ -50,7 +52,7 @@ def query_handler(response: ProfileResponse, message: Message):
                            parse_mode='HTML', reply_markup=markup)
     if response.type == 'has_stories':
         markup = types.InlineKeyboardMarkup()
-        text_data = f'analyze_{response.user_id}'
+        text_data = f'analyze_{response.user_id}_{int(time.time())}'
         markup.add(types.InlineKeyboardButton(text='Прошерстить', callback_data=text_data))
         with open(response.avatar_path, 'rb') as photo:
             BOT.send_photo(message.chat.id, photo, caption=response.text_message,
@@ -61,9 +63,9 @@ def query_handler(response: ProfileResponse, message: Message):
 
 @BOT.callback_query_handler(func=lambda call: call.data.startswith('analyze'))
 def analyze(callback_query):
-    user_id = callback_query.data.split('_')[1]
+    callback_type, user_id, time_create = callback_query.data.split('_')
     status_bar = BOT.send_message(callback_query.message.chat.id, text='Загружаю сторис...')
-    response = LOADER.download_stories(user_id, status_bar)
+    response = LOADER.download_stories(user_id, status_bar, time_create)
     text_message: str
     if response:
         for story_data in response.story_data_array:
@@ -100,10 +102,10 @@ def analyze(callback_query):
                         'У данного аккаунта сейчас нет актуальных сторис, попробуй прошерстить его позже')
         BOT.send_message(callback_query.message.chat.id, text=text_message, parse_mode='HTML')
 
-    if callback_query.data.split('_')[0] == 'analyze':
+    if callback_type == 'analyze':
         markup = types.InlineKeyboardMarkup(row_width=2)
         btn1 = types.InlineKeyboardButton(text='Новый запрос', callback_data=f'query_{user_id}')
-        btn2 = types.InlineKeyboardButton(text='Прошерстить', callback_data=f'analyzeNew_{user_id}')
+        btn2 = types.InlineKeyboardButton(text='Прошерстить', callback_data=f'analyzeNew_{user_id}_{int(time.time())}')
         markup.add(btn1, btn2)
         BOT.edit_message_reply_markup(
             chat_id=callback_query.message.chat.id,

@@ -1,6 +1,3 @@
-import datetime
-from datetime import timedelta, datetime
-
 from instagrapi import Client
 from instagrapi.exceptions import LoginRequired, UserNotFound
 from instagrapi.types import Story, User
@@ -10,7 +7,7 @@ import os
 import time
 from typing import List, Dict
 from configparser import ConfigParser
-from dtos import ProfileResponse, StoryResponse, StoryData
+from dtos import ProfileResponse, StoryResponse, StoryData, UserData
 from utils import create_user_text
 
 
@@ -18,11 +15,13 @@ class Loader:
     CLIENT: Client
     BOT: TeleBot
     PROPERTIES: ConfigParser
+    USERS_CACHE: Dict[str, UserData]
     STORIES: List[Story]
     def __init__(self, properties: ConfigParser, BOT: TeleBot):
         self.CLIENT = Client()
         self.BOT = BOT
         self.PROPERTIES = properties
+        self.USERS_CACHE = {}
         self.STORIES = None
 
         def sign_in_session():
@@ -70,6 +69,8 @@ class Loader:
         status_bar = message.text + '\n✅ Аккаунт найден'
         self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
+        self.USERS_CACHE[user.pk] = UserData(user.username, user.full_name)
+
         # stories search
         self.STORIES = self.CLIENT.user_stories(user.pk)
         status_bar += '\n✅ Информация о сторис'
@@ -83,7 +84,7 @@ class Loader:
         avatar_path = os.path.join(folder_avatar, filename + '.jpg')
         if not os.path.isfile(avatar_path):
             os.mknod(avatar_path)
-            self.CLIENT.photo_download_by_url(str(user.profile_pic_url), filename, folder_avatar)
+            self.CLIENT.photo_download_by_url(str(user.profile_pic_url_hd), filename, folder_avatar)
         status_bar += '\n✅ Фото профиля'
         self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
@@ -98,13 +99,28 @@ class Loader:
 
         return ProfileResponse(type_response, text_message, avatar_path, user.pk)
 
-    def download_stories(self, user_id: str, message: Message) -> StoryResponse | None:
-        if (not self.STORIES or len(self.STORIES) == 0 or self.STORIES[0].user.pk != user_id
-                or datetime.now() - self.STORIES[-1].taken_at >= timedelta(minutes=10)):
+    def download_stories(self, user_id: str, message: Message, time_create: str) -> StoryResponse | None:
+        status_bar = message.text
+        user_data = self.USERS_CACHE.get(user_id)
 
-            status_bar = message.text + '\n\nПоиск сторис'
+        if not user_data:
+            status_bar += '\n\nПоиск аккаунта'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-            self.STORIES = self.CLIENT.user_stories(user_id)
+            user = self.CLIENT.user_info_v1(user_id)
+            user_data = UserData(user.username, user.full_name)
+            self.USERS_CACHE[user_id] = user_data
+            status_bar = status_bar.replace('Поиск аккаунта', '✅ Аккаунт найден')
+            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+
+        if (not self.STORIES or len(self.STORIES) == 0 or self.STORIES[0].user.pk != user_id
+                or int(time.time()) - int(time_create) > 600):
+
+            if 'Аккаунт найден' in status_bar:
+                status_bar += '\nПоиск сторис'
+            else:
+                status_bar += '\n\nПоиск сторис'
+            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+            self.STORIES = self.CLIENT.user_stories_v1(user_id)
 
             if len(self.STORIES) > 0:
                 status_bar = status_bar.replace('Поиск сторис', '✅ Сторис найдены')
@@ -114,7 +130,7 @@ class Loader:
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 return None
 
-        folder_stories = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.STORIES[0].user.username}/stories"
+        folder_stories = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{user_data.username}/stories"
         if not os.path.exists(folder_stories):
             os.makedirs(folder_stories)
 
@@ -142,7 +158,7 @@ class Loader:
             status_bar += (f'\n\nАктуальных сторис: {len(self.STORIES)}'
                            f'\nУже просмотрено: {count_viewed}')
             if story_data_array:
-                status_bar += f'\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
+                status_bar += f'\n\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
         else:
             status_bar += f'\n\nЗагружено: [{count_downloads}/{len(self.STORIES)}]'
@@ -155,41 +171,6 @@ class Loader:
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             count_downloads += 1
 
-        response = StoryResponse(self.STORIES[0].user.full_name, story_data_array, len(self.STORIES), count_viewed)
+        response = StoryResponse(user_data.full_name, story_data_array, len(self.STORIES), count_viewed)
         self.STORIES = None
         return response
-
-
-# def download():
-#     time_start = time.time()
-#
-#     username_for_load = 'anichkina_a'
-#
-#     user = cl.user_info_by_username_v1(username_for_load)
-#
-#     print('user найден')
-#     print(time.time() - time_start)
-#
-#     user_stories = cl.user_stories(user.pk)
-#     print('cl.user_stories')
-#     print(time.time() - time_start)
-#
-#     folder = f'/home/evgeniy/PycharmProjects/insta-bot/cache/{username_for_load + "v2"}/stories'
-#     if not os.path.exists(folder):
-#         os.makedirs(folder)
-#
-#
-#     for story in user_stories:
-#         filename = story.taken_at.strftime('%d-%m-%Y_%H-%M-%S') + f'_{str(123123)}'
-#         cl.story_download(story.pk, filename, folder)
-#         print(cl.story_info(story.pk))
-#         for k, v in vars(story).items():
-#             print(f'key: {k} val: {v}')
-#
-#     print(user_stories)
-#
-#     time_end = time.time()
-#     print(time_end - time_start)
-#
-#
-# download()

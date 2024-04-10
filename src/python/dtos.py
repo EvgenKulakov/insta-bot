@@ -14,6 +14,15 @@ class ProfileResponse:
         self.user_id = user_id
 
 
+class UserData:
+    username: str
+    full_name: str
+
+    def __init__(self, username: str, full_name: str):
+        self.username = username
+        self.full_name = full_name
+
+
 class StoryData:
     content: str
     story_pk: str

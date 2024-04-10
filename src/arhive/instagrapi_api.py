@@ -7,7 +7,7 @@ import os
 import time
 from typing import List, Dict
 from configparser import ConfigParser
-from dtos import ProfileResponse, StoryResponse, StoryData, UserData
+from dtos import UserResponse, StoryResponse, StoryData, UserData
 from utils import create_user_text
 
 
@@ -43,6 +43,7 @@ class Loader:
                     self.CLIENT.set_settings({})
                     self.CLIENT.set_uuids(old_session["uuids"])
                     self.CLIENT.login(username, password)
+                    self.CLIENT.dump_settings(properties['INSTAGRAM']['DUMP_NEW'])
             except Exception as e:
                 text = (f'Ошибка:\n'
                         f'Couldn\'t login user using session information: {e}\n'
@@ -52,27 +53,23 @@ class Loader:
 
         sign_in_session()
 
-    def user_info(self, message: Message, username: str | None = None,
-                  user_id: str | None = None) -> ProfileResponse:
+    def user_info(self, message: Message, username: str) -> UserResponse:
         user: User
         status_bar: str
 
         # account search
-        if username:
-            try:
-                user = self.CLIENT.user_info_by_username_v1(username)
-            except UserNotFound:
-                text_message = f'❌ Аккаунта "{username}" нет в инстаграм'
-                return ProfileResponse('error', text_message)
-        else:
-            user = self.CLIENT.user_info_v1(user_id)
+        try:
+            user = self.CLIENT.user_info_by_username_v1(username)
+        except UserNotFound:
+            text_message = f'❌ Аккаунта "{username}" нет в инстаграм'
+            return UserResponse('error', text_message)
         status_bar = message.text + '\n✅ Аккаунт найден'
         self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
-        self.USERS_CACHE[user.pk] = UserData(user.username, user.full_name)
+        self.USERS_CACHE[username] = UserData(user.pk, user.username, user.full_name)
 
         # stories search
-        self.STORIES = self.CLIENT.user_stories(user.pk)
+        self.STORIES = self.CLIENT.user_stories_v1(user.pk)
         status_bar += '\n✅ Информация о сторис'
         self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
@@ -97,22 +94,22 @@ class Loader:
             type_response = 'has_stories'
         text_message = create_user_text(user, self.STORIES)
 
-        return ProfileResponse(type_response, text_message, avatar_path, user.pk)
+        return UserResponse(type_response, text_message, avatar_path, username)
 
-    def download_stories(self, user_id: str, message: Message, time_create: str) -> StoryResponse | None:
+    def download_stories(self, username: str, message: Message, time_create: str) -> StoryResponse | None:
         status_bar = message.text
-        user_data = self.USERS_CACHE.get(user_id)
+        user_data = self.USERS_CACHE.get(username)
 
         if not user_data:
             status_bar += '\n\nПоиск аккаунта'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-            user = self.CLIENT.user_info_v1(user_id)
-            user_data = UserData(user.username, user.full_name)
-            self.USERS_CACHE[user_id] = user_data
+            user = self.CLIENT.user_info_by_username_v1(username)
+            user_data = UserData(user.pk, user.username, user.full_name)
+            self.USERS_CACHE[username] = user_data
             status_bar = status_bar.replace('Поиск аккаунта', '✅ Аккаунт найден')
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
-        if (not self.STORIES or len(self.STORIES) == 0 or self.STORIES[0].user.pk != user_id
+        if (not self.STORIES or len(self.STORIES) == 0 or self.STORIES[0].user.pk != user_data.user_id
                 or int(time.time()) - int(time_create) > 600):
 
             if 'Аккаунт найден' in status_bar:
@@ -120,7 +117,7 @@ class Loader:
             else:
                 status_bar += '\n\nПоиск сторис'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-            self.STORIES = self.CLIENT.user_stories_v1(user_id)
+            self.STORIES = self.CLIENT.user_stories_v1(user_data.user_id)
 
             if len(self.STORIES) > 0:
                 status_bar = status_bar.replace('Поиск сторис', '✅ Сторис найдены')
@@ -156,7 +153,7 @@ class Loader:
 
         if count_viewed > 0:
             status_bar += (f'\n\nАктуальных сторис: {len(self.STORIES)}'
-                           f'\nУже просмотрено: {count_viewed}')
+                           f'\nСкачано ранее: {count_viewed}')
             if story_data_array:
                 status_bar += f'\n\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)

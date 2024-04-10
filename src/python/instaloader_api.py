@@ -1,5 +1,3 @@
-import configparser
-
 import telebot
 from instaloader import Instaloader, Profile, ProfileNotExistsException, Story, StoryItem
 from telebot import TeleBot
@@ -7,9 +5,10 @@ from telebot.types import Message
 from configparser import ConfigParser
 import os
 from datetime import datetime
-from dtos import ProfileResponse, StoryData, StoryResponse
+from dtos import ProfileResponse, StoryDataInstaloader, StoryResponseInstaloader
 from utils import create_profile_text
 from typing import Iterator
+import configparser
 import time
 
 
@@ -76,18 +75,22 @@ class Loader:
             self.INSTALOADER.context.write_raw(resp, avatar_path)
             print()
 
-        return ProfileResponse(type_response, text_message, avatar_path)
+        return ProfileResponse(type_response, text_message, avatar_path, self.PROFILE.userid)
 
-    def download_stories(self, profile_id: int, message: Message) -> StoryResponse | None:
+    def download_stories(self, profile_id: int, message: Message, time_created: str) -> StoryResponseInstaloader | None:
         status_bar = message.text
         if not self.PROFILE or self.PROFILE.userid != profile_id or not self.STORY:
             if not self.PROFILE or self.PROFILE.userid != profile_id:
-                status_bar += '\nПоиск аккаунта'
+                status_bar += '\n\nПоиск аккаунта'
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
                 self.PROFILE = Profile.from_id(self.INSTALOADER.context, profile_id)
                 status_bar = status_bar.replace('Поиск аккаунта', '✅ Аккаунт найден')
-            status_bar += '\nПоиск сторис'
+
+            if 'Аккаунт найден' in status_bar:
+                status_bar += '\nПоиск сторис'
+            else:
+                status_bar += '\n\nПоиск сторис'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
             self.STORY = next(self.INSTALOADER.get_stories([profile_id]))
@@ -111,20 +114,20 @@ class Loader:
 
             if item.is_video:
                 if not os.path.isfile(path + '.mp4'):
-                    story_data_array.append(StoryData('video', path + '.mp4', item.video_url))
+                    story_data_array.append(StoryDataInstaloader('video', path + '.mp4', item.video_url))
                 else: count_viewed += 1
             else:
                 if not os.path.isfile(path + ".jpg"):
-                    story_data_array.append(StoryData('photo', path + '.jpg', item.url))
+                    story_data_array.append(StoryDataInstaloader('photo', path + '.jpg', item.url))
                 else: count_viewed += 1
 
         count_downloads = 0
 
         if count_viewed > 0:
             status_bar += (f'\n\nАктуальных сторис: {self.STORY.itemcount}'
-                           f'\nУже просмотрено: {count_viewed}')
+                           f'\nСкачано ранее: {count_viewed}')
             if story_data_array:
-                status_bar += f'\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
+                status_bar += f'\n\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
             for story_data in story_data_array:
@@ -148,7 +151,7 @@ class Loader:
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 count_downloads += 1
 
-        response = StoryResponse(self.PROFILE.full_name, story_data_array, self.STORY.itemcount, count_viewed)
+        response = StoryResponseInstaloader(self.PROFILE.full_name, story_data_array, self.STORY.itemcount, count_viewed)
         self.STORY = None
         return response
 

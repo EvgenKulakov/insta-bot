@@ -1,3 +1,4 @@
 pip freeze > requirements.txt
 pip install instaloader
 pip install pyTelegramBotAPI
+pip install instagrapi

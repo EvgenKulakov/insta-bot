@@ -5,22 +5,35 @@ class ProfileResponse:
     type: str
     text_message: str
     avatar_path: str
+    user_id: str
 
-    def __init__(self, type: str, text_message: str, avatar_path: str | None = None):
+    def __init__(self, type: str, text_message: str, avatar_path: str | None = None, user_id: str | None = None):
         self.type = type
         self.text_message = text_message
         self.avatar_path = avatar_path
+        self.user_id = user_id
+
+
+class UserData:
+    username: str
+    full_name: str
+
+    def __init__(self, username: str, full_name: str):
+        self.username = username
+        self.full_name = full_name
 
 
 class StoryData:
     content: str
+    story_pk: str
     path: str
-    url: str
+    filename: str
 
-    def __init__(self, content: str, path: str, url: str):
+    def __init__(self, content: str, story_pk: str, path: str, filename: str):
         self.content = content
+        self.story_pk = story_pk
         self.path = path
-        self.url = url
+        self.filename = filename
 
 
 class StoryResponse:

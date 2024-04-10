@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 from dtos import ProfileResponse, StoryDataInstaloader, StoryResponseInstaloader
 from utils import create_profile_text
-from typing import Iterator
+from typing import Iterator, Dict
 import configparser
 import time
 
@@ -15,6 +15,7 @@ import time
 class Loader:
     INSTALOADER: Instaloader
     PROFILE: Profile | None
+    PROFILES_CACHE: Dict[int, Profile]
     STORY: Story | None
     BOT: TeleBot
     def __init__(self, properties: ConfigParser, BOT: TeleBot):
@@ -24,12 +25,14 @@ class Loader:
         self.INSTALOADER = Instaloader()
         self.INSTALOADER.load_session_from_file(user, session_token)
         self.PROFILE = None
+        self.PROFILES_CACHE = {}
         self.STORY = None
         self.BOT = BOT
 
     def set_profile_from_username(self, username: str, message: Message) -> ProfileResponse:
         try:
             self.PROFILE = Profile.from_username(self.INSTALOADER.context, username)
+            self.PROFILES_CACHE[self.PROFILE.userid] = self.PROFILE
             status_bar = message.text + '\n✅ Аккаунт найден'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             return self.profile_data(message, status_bar)
@@ -39,6 +42,7 @@ class Loader:
 
     def set_profile_from_id(self, profile_id: int, message: Message) -> ProfileResponse:
         self.PROFILE = Profile.from_id(self.INSTALOADER.context, profile_id)
+        self.PROFILES_CACHE[self.PROFILE.userid] = self.PROFILE
         status_bar = message.text + '\n✅ Аккаунт найден'
         self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
         return self.profile_data(message, status_bar)
@@ -79,12 +83,18 @@ class Loader:
 
     def download_stories(self, profile_id: int, message: Message, time_created: str) -> StoryResponseInstaloader | None:
         status_bar = message.text
-        if not self.PROFILE or self.PROFILE.userid != profile_id or not self.STORY:
+        if (not self.PROFILE or self.PROFILE.userid != profile_id
+                or not self.STORY or int(time.time()) - int(time_created) > 600):
             if not self.PROFILE or self.PROFILE.userid != profile_id:
                 status_bar += '\n\nПоиск аккаунта'
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
-                self.PROFILE = Profile.from_id(self.INSTALOADER.context, profile_id)
+                profile = self.PROFILES_CACHE.get(profile_id)
+                if profile:
+                    self.PROFILE = profile
+                else:
+                    self.PROFILE = Profile.from_id(self.INSTALOADER.context, profile_id)
+                    self.PROFILES_CACHE[self.PROFILE.userid] = self.PROFILE
                 status_bar = status_bar.replace('Поиск аккаунта', '✅ Аккаунт найден')
 
             if 'Аккаунт найден' in status_bar:
@@ -97,7 +107,7 @@ class Loader:
             if self.STORY and self.STORY.itemcount > 0:
                 status_bar = status_bar.replace('Поиск сторис', '✅ Сторис найдены')
             else:
-                status_bar = status_bar.replace('Поиск сторис', 'Сторис не найдены ❌')
+                status_bar = status_bar.replace('Поиск сторис', '❌ Сторис не найдены')
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 return None
 

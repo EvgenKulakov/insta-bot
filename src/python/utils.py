@@ -1,10 +1,12 @@
-import re
-from typing import List
-
 import instaloader
 from instaloader import Profile
 import instagrapi
 from instagrapi.types import User
+from dtos import StoryDataInstaloader
+import re
+from typing import List
+import os
+from datetime import datetime, timedelta
 
 
 def valid_username(username: str) -> bool:
@@ -62,3 +64,15 @@ def create_user_text(user: User, stories: List[instagrapi.types.Story]) -> str:
                     f'(последняя в {stories[-1].taken_at.strftime("%H:%M:%S")}).\n'
                     f'Я могу анонимно прошерстить этот аккаунт и переслать все сторис тебе.\n'
                     f'Прошерстить {user.full_name}?')
+
+
+def files_handler(story_data_array: List[StoryDataInstaloader], folder_stories: str):
+
+    for story_data in story_data_array:
+        os.truncate(story_data.path, 0)
+
+    for file_name in os.listdir(folder_stories):
+        date_story = datetime.strptime(file_name.split('_')[0], '%d-%m-%Y')
+        if datetime.now() - date_story > timedelta(days=2):
+            file_path = os.path.join(folder_stories, file_name)
+            os.remove(file_path)

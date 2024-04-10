@@ -81,10 +81,12 @@ class StoryResponseInstaloader:
     story_data_array: List[StoryDataInstaloader]
     count_stories: int
     count_viewed: int
+    folder_stories: str
 
     def __init__(self, full_name: str, story_data_array: List[StoryDataInstaloader] | None,
-                 count_stories: int, count_viewed: int):
+                 count_stories: int, count_viewed: int, folder_stories: str):
         self.full_name = full_name
         self.story_data_array = story_data_array
         self.count_stories = count_stories
         self.count_viewed = count_viewed
+        self.folder_stories = folder_stories

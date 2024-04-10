@@ -1,8 +1,11 @@
+import os
+from datetime import datetime, timedelta
+
 from telebot import telebot, types
 from telebot.types import Message
 import configparser
 import instaloader_api
-from utils import valid_username
+from utils import valid_username, files_handler
 from dtos import ProfileResponse
 import time
 
@@ -75,8 +78,7 @@ def analyze(callback_query):
                 with open(story_data.path, 'rb') as video:
                     BOT.send_video(callback_query.message.chat.id, video)
 
-        for story_data in response.story_data_array:
-            print(f'обнуление {story_data.path}')
+        files_handler(response.story_data_array, response.folder_stories)
 
         if not response.story_data_array:
             if response.count_stories == 1:

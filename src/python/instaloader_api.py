@@ -151,7 +151,8 @@ class Loader:
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 count_downloads += 1
 
-        response = StoryResponseInstaloader(self.PROFILE.full_name, story_data_array, self.STORY.itemcount, count_viewed)
+        response = StoryResponseInstaloader(self.PROFILE.full_name, story_data_array,
+                                            self.STORY.itemcount, count_viewed, folder_stories)
         self.STORY = None
         return response
 

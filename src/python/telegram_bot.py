@@ -1,6 +1,3 @@
-import os
-from datetime import datetime, timedelta
-
 from telebot import telebot, types
 from telebot.types import Message
 import configparser
@@ -11,7 +8,7 @@ import time
 
 
 properties = configparser.ConfigParser()
-properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
+properties.read('src/resources/application.properties')
 
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
 LOADER = instaloader_api.Loader(properties, BOT)

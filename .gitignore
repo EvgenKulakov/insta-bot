@@ -5,3 +5,4 @@ __pycache__/
 session-token
 application.properties
 *dump.json
+data

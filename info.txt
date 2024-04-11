@@ -1,4 +1,4 @@
 pip freeze > requirements.txt
 pip install instaloader
 pip install pyTelegramBotAPI
-pip install instagrapi
+docker run --restart always -v cache:/app/cache -d <image id or name>

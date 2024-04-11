@@ -13,14 +13,16 @@ import time
 
 
 class Loader:
+    PROPERTIES: ConfigParser
     INSTALOADER: Instaloader
     PROFILE: Profile | None
     PROFILES_CACHE: Dict[int, Profile]
     STORY: Story | None
     BOT: TeleBot
     def __init__(self, properties: ConfigParser, BOT: TeleBot):
-        user = properties['INSTAGRAM']['USER']
-        session_token = properties['INSTAGRAM']['TOKEN']
+        self.PROPERTIES = properties
+        user = self.PROPERTIES['INSTAGRAM']['USER']
+        session_token = self.PROPERTIES['INSTAGRAM']['TOKEN']
 
         self.INSTALOADER = Instaloader()
         self.INSTALOADER.load_session_from_file(user, session_token)
@@ -68,7 +70,7 @@ class Loader:
         status_bar += '\n✅ Фото профиля'
         self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
-        folder_avatar = f'/home/evgeniy/PycharmProjects/insta-bot/cache/{self.PROFILE.username}/avatar'
+        folder_avatar = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.PROFILE.username}/avatar"
         if not os.path.exists(folder_avatar):
             os.makedirs(folder_avatar)
         date_avatar = datetime.strptime(resp.headers["Last-Modified"], "%a, %d %b %Y %H:%M:%S %Z")
@@ -111,7 +113,7 @@ class Loader:
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 return None
 
-        folder_stories = f'/home/evgeniy/PycharmProjects/insta-bot/cache/{self.PROFILE.username}/stories'
+        folder_stories = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.PROFILE.username}/stories"
         if not os.path.exists(folder_stories):
             os.makedirs(folder_stories)
 
@@ -170,8 +172,8 @@ class Loader:
         for item in self.STORY._node['items']:
             yield StoryItem(self.STORY._context, item, self.STORY.owner_profile)
 
-def all_load():
-    properties = configparser.ConfigParser()
-    properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
-    loader = Loader(properties, telebot.TeleBot(properties['TELEGRAM']['BOT']))
-    loader.INSTALOADER.download_profile('username')
+# def all_load():
+#     properties = configparser.ConfigParser()
+#     properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
+#     loader = Loader(properties, telebot.TeleBot(properties['TELEGRAM']['BOT']))
+#     loader.INSTALOADER.download_profile('username')

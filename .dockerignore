@@ -2,5 +2,6 @@
 .idea
 .git
 .gitignore
-added-libraries.txt
+info.txt
 *.cpython-312.pyc
+src/arhive

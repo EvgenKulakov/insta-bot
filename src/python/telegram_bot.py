@@ -8,7 +8,7 @@ import time
 
 
 properties = configparser.ConfigParser()
-properties.read('src/resources/application.properties')
+properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
 
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
 LOADER = instaloader_api.Loader(properties, BOT)
@@ -24,7 +24,7 @@ def read_message(message):
     username = message.text.lower().strip()
     if valid_username(username):
         status_bar = BOT.send_message(message.chat.id, text='Делаю запрос...')
-        response = LOADER.set_profile_from_username(username, status_bar)
+        response = LOADER.search_profile(username, status_bar)
         query_handler(response, message)
     else:
         BOT.send_message(message.chat.id, text=f'❌ "{message.text}" - некорректный никнейм')
@@ -33,8 +33,8 @@ def read_message(message):
 @BOT.callback_query_handler(func=lambda call: call.data.startswith('query'))
 def query(callback_query):
     status_bar = BOT.send_message(callback_query.message.chat.id, text='Делаю запрос...')
-    profile_id = callback_query.data.split('_')[1]
-    response = LOADER.set_profile_from_id(profile_id, status_bar)
+    username = callback_query.data.split('|')[1]
+    response = LOADER.search_profile(username, status_bar)
     query_handler(response, callback_query.message)
 
 
@@ -44,14 +44,14 @@ def query_handler(response: ProfileResponse, message: Message):
             BOT.send_photo(message.chat.id, photo, caption=response.text_message, parse_mode='HTML')
     if response.type == 'no_stories':
         markup = types.InlineKeyboardMarkup()
-        text_data = f'query_{response.profile_id}'
+        text_data = f'query|{response.username}'
         markup.add(types.InlineKeyboardButton(text='🔍 Сделать новый запрос', callback_data=text_data))
         with open(response.avatar_path, 'rb') as photo:
             BOT.send_photo(message.chat.id, photo, caption=response.text_message,
                            parse_mode='HTML', reply_markup=markup)
     if response.type == 'has_stories':
         markup = types.InlineKeyboardMarkup()
-        text_data = f'analyze_{response.profile_id}_{int(time.time())}'
+        text_data = f'analyze|{response.username}|{int(time.time())}'
         markup.add(types.InlineKeyboardButton(text='🐝 Прошерстить', callback_data=text_data))
         with open(response.avatar_path, 'rb') as photo:
             BOT.send_photo(message.chat.id, photo, caption=response.text_message,
@@ -62,9 +62,9 @@ def query_handler(response: ProfileResponse, message: Message):
 
 @BOT.callback_query_handler(func=lambda call: call.data.startswith('analyze'))
 def analyze(callback_query):
-    callback_type, profile_id_str, time_create = callback_query.data.split('_')
+    callback_type, username, time_create = callback_query.data.split('|')
     status_bar = BOT.send_message(callback_query.message.chat.id, text='Загружаю сторис...')
-    response = LOADER.download_stories(int(profile_id_str), status_bar, time_create)
+    response = LOADER.download_stories(username, status_bar, time_create)
     text_message: str
     if response:
         for story_data in response.story_data_array:
@@ -102,9 +102,9 @@ def analyze(callback_query):
 
     if callback_type == 'analyze':
         markup = types.InlineKeyboardMarkup(row_width=2)
-        btn1 = types.InlineKeyboardButton(text='🔍 Новый запрос', callback_data=f'query_{profile_id_str}')
+        btn1 = types.InlineKeyboardButton(text='🔍 Новый запрос', callback_data=f'query|{username}')
         btn2 = types.InlineKeyboardButton(text='🐝 Прошерстить',
-                                          callback_data=f'analyzeNew_{profile_id_str}_{int(time.time())}')
+                                          callback_data=f'analyzeNew|{username}|{int(time.time())}')
         markup.add(btn1, btn2)
         BOT.edit_message_reply_markup(
             chat_id=callback_query.message.chat.id,

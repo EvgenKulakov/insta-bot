@@ -19,23 +19,22 @@ def create_profile_text(profile: Profile, story: instaloader.Story | None = None
     if profile.is_private:
         return (f'{start_text}'
                 f'<b>{profile.full_name}</b> - это закрытый профиль. Сторисы для просмотра недоступны')
-    if not profile.has_public_story:
+    if story.itemcount == 0:
         return (f'{start_text}'
                 f'У <b>{profile.full_name}</b> в данный момент нет актуальных сторис.\n'
                 f'Попробуй прошерстить этот аккаунт позже')
-    else:
-        if story.itemcount == 1:
-            return (f'{start_text}'
-                    f'У <b>{profile.full_name}</b> есть одна сторис - '
-                    f'выложенная в {story.latest_media_local.strftime("%H:%M:%S")}.\n'
-                    f'Я могу анонимно прошерстить этот аккаунт и переслать эту сторис тебе.\n'
-                    f'Прошерстить {profile.full_name}?')
-        else:
-            return (f'{start_text}'
-                    f'У <b>{profile.full_name}</b> есть {str(story.itemcount)} сторис '
-                    f'(последняя в {story.latest_media_local.strftime("%H:%M:%S")}).\n'
-                    f'Я могу анонимно прошерстить этот аккаунт и переслать все сторис тебе.\n'
-                    f'Прошерстить {profile.full_name}?')
+    if story.itemcount == 1:
+        return (f'{start_text}'
+                f'У <b>{profile.full_name}</b> есть одна сторис - '
+                f'выложенная в {story.latest_media_local.strftime("%H:%M:%S")}.\n'
+                f'Я могу анонимно прошерстить этот аккаунт и переслать эту сторис тебе.\n'
+                f'Прошерстить {profile.full_name}?')
+    if story.itemcount > 1:
+        return (f'{start_text}'
+                f'У <b>{profile.full_name}</b> есть {str(story.itemcount)} сторис '
+                f'(последняя в {story.latest_media_local.strftime("%H:%M:%S")}).\n'
+                f'Я могу анонимно прошерстить этот аккаунт и переслать все сторис тебе.\n'
+                f'Прошерстить {profile.full_name}?')
 
 
 def files_handler(story_data_array: List[StoryDataInstaloader], folder_stories: str):

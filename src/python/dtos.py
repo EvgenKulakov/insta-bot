@@ -18,13 +18,13 @@ class ProfileResponse:
     type: str
     text_message: str
     avatar_path: str
-    profile_id: int
+    username: str
 
-    def __init__(self, type: str, text_message: str, avatar_path: str | None = None, profile_id: int | None = None):
+    def __init__(self, type: str, text_message: str, avatar_path: str | None = None, username: str | None = None):
         self.type = type
         self.text_message = text_message
         self.avatar_path = avatar_path
-        self.profile_id = profile_id
+        self.username = username
 
 
 class UserData:

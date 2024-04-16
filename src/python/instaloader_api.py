@@ -1,3 +1,4 @@
+import itertools
 import telebot
 from instaloader import Instaloader, Profile, ProfileNotExistsException, Story, StoryItem
 from telebot import TeleBot
@@ -7,18 +8,22 @@ import os
 from datetime import datetime
 from dtos import ProfileResponse, StoryDataInstaloader, StoryResponseInstaloader
 from utils import create_profile_text
-from typing import Iterator, Dict
+from typing import Dict
 import configparser
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 
 class Loader:
     PROPERTIES: ConfigParser
     INSTALOADER: Instaloader
-    PROFILE: Profile | None
-    PROFILES_CACHE: Dict[int, Profile]
-    STORY: Story | None
+    LOADER_WITHOUT_LOGIN: Instaloader
+    CURRENT_PROFILE: Profile | None
+    PROFILES_CACHE: Dict[str, Profile]
+    CURRENT_STORY: Story | None
     BOT: TeleBot
+    STOP_SEARCH: bool
+    EXECUTOR: ThreadPoolExecutor
     def __init__(self, properties: ConfigParser, BOT: TeleBot):
         self.PROPERTIES = properties
         user = self.PROPERTIES['INSTAGRAM']['USER']
@@ -26,154 +31,181 @@ class Loader:
 
         self.INSTALOADER = Instaloader()
         self.INSTALOADER.load_session_from_file(user, session_token)
-        self.PROFILE = None
+        self.LOADER_WITHOUT_LOGIN = Instaloader()
+        self.CURRENT_PROFILE = None
         self.PROFILES_CACHE = {}
-        self.STORY = None
+        self.CURRENT_STORY = None
         self.BOT = BOT
+        self.STOP_SEARCH = False
+        self.EXECUTOR = ThreadPoolExecutor(max_workers=1)
+        self.BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='✅ INSTALOADER start')
 
-    def set_profile_from_username(self, username: str, message: Message) -> ProfileResponse:
+    def search_profile(self, username: str, message: Message) -> ProfileResponse:
         try:
-            self.PROFILE = Profile.from_username(self.INSTALOADER.context, username)
-            self.PROFILES_CACHE[self.PROFILE.userid] = self.PROFILE
-            status_bar = message.text + '\n✅ Аккаунт найден'
+            status_bar = message.text
+
+            def search():
+                self.download_status_bar(message, status_bar, 'Поиск аккаунта')
+                self.CURRENT_PROFILE = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
+                self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
+            self.thread_handler(search)
+
+            status_bar += '\n✅ Аккаунт найден'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             return self.profile_data(message, status_bar)
         except ProfileNotExistsException:
-            text_message = f'❌ Аккаунта "{username}" нет в инстаграм'
+            self.STOP_SEARCH = True
+            time.sleep(0.1)
+            status_bar = message.text + '\n❌ Поиск аккаунта'
+            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+            text_message = f'Аккаунта "{username}" нет в инстаграм'
             return ProfileResponse('error', text_message)
-
-    def set_profile_from_id(self, profile_id: int, message: Message) -> ProfileResponse:
-        self.PROFILE = Profile.from_id(self.INSTALOADER.context, profile_id)
-        self.PROFILES_CACHE[self.PROFILE.userid] = self.PROFILE
-        status_bar = message.text + '\n✅ Аккаунт найден'
-        self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-        return self.profile_data(message, status_bar)
 
     def profile_data(self, message: Message, status_bar: str) -> ProfileResponse:
         type_response: str
         text_message: str
 
-        if self.PROFILE.is_private:
+        if self.CURRENT_PROFILE.is_private:
             type_response = 'private'
-            text_message = create_profile_text(self.PROFILE)
-        elif not self.PROFILE.has_public_story:
-            type_response = 'no_stories'
-            text_message = create_profile_text(self.PROFILE)
+            text_message = create_profile_text(self.CURRENT_PROFILE)
         else:
-            self.STORY = next(self.INSTALOADER.get_stories([self.PROFILE.userid]))
+            def search():
+                self.download_status_bar(message, status_bar, 'Проверка сторис')
+                self.CURRENT_STORY = next(self.INSTALOADER.get_stories([self.CURRENT_PROFILE.userid]))
+            self.thread_handler(search)
+
+            type_response = 'no_stories' if self.CURRENT_STORY.itemcount == 0 else 'has_stories'
+            text_message = create_profile_text(self.CURRENT_PROFILE, self.CURRENT_STORY)
+
             status_bar += '\n✅ Информация о сторис'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-            type_response = 'has_stories'
-            text_message = create_profile_text(self.PROFILE, self.STORY)
 
-        resp = self.INSTALOADER.context.get_raw(str(self.PROFILE.profile_pic_url))
+        self.STOP_SEARCH = False
+        self.download_status_bar(message, status_bar, 'Поиск фото')
+        resp = self.LOADER_WITHOUT_LOGIN.context.get_raw(str(self.CURRENT_PROFILE.profile_pic_url))
+        self.STOP_SEARCH = True
+        time.sleep(0.1)
         status_bar += '\n✅ Фото профиля'
         self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
-        folder_avatar = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.PROFILE.username}/avatar"
+        folder_avatar = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.CURRENT_PROFILE.username}/avatar"
         if not os.path.exists(folder_avatar):
             os.makedirs(folder_avatar)
         date_avatar = datetime.strptime(resp.headers["Last-Modified"], "%a, %d %b %Y %H:%M:%S %Z")
         filename = date_avatar.strftime("%d-%m-%Y_%H-%M-%S") + '.jpg'
         avatar_path = os.path.join(folder_avatar, filename)
 
-        if not os.path.isfile(avatar_path):
-            self.INSTALOADER.context.write_raw(resp, avatar_path)
+        if not os.path.exists(avatar_path):
+            self.LOADER_WITHOUT_LOGIN.context.write_raw(resp, avatar_path)
             print()
 
-        return ProfileResponse(type_response, text_message, avatar_path, self.PROFILE.userid)
+        return ProfileResponse(type_response, text_message, avatar_path, self.CURRENT_PROFILE.username)
 
-    def download_stories(self, profile_id: int, message: Message, time_created: str) -> StoryResponseInstaloader | None:
+    def download_stories(self, username: str, message: Message, time_created: str) -> StoryResponseInstaloader | None:
+        self.CURRENT_PROFILE = self.PROFILES_CACHE.get(username)
         status_bar = message.text
-        if (not self.PROFILE or self.PROFILE.userid != profile_id
-                or not self.STORY or int(time.time()) - int(time_created) > 600):
-            if not self.PROFILE or self.PROFILE.userid != profile_id:
-                status_bar += '\n\nПоиск аккаунта'
+        if not self.CURRENT_PROFILE or not self.CURRENT_STORY or int(time.time()) - int(time_created) > 600:
+            if not self.CURRENT_PROFILE:
+                def search():
+                    self.download_status_bar(message, status_bar, 'Поиск аккаунта', count_idents=2)
+                    self.CURRENT_PROFILE = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
+                    self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
+                self.thread_handler(search)
+
+                status_bar += '\n\n✅ Аккаунт найден'
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
-                profile = self.PROFILES_CACHE.get(profile_id)
-                if profile:
-                    self.PROFILE = profile
-                else:
-                    self.PROFILE = Profile.from_id(self.INSTALOADER.context, profile_id)
-                    self.PROFILES_CACHE[self.PROFILE.userid] = self.PROFILE
-                status_bar = status_bar.replace('Поиск аккаунта', '✅ Аккаунт найден')
+            count_idents = 1 if 'Аккаунт найден' in status_bar else 2
+            def search():
+                self.download_status_bar(message, status_bar, 'Поиск сторис', count_idents=count_idents)
+                self.CURRENT_STORY = next(self.INSTALOADER.get_stories([self.CURRENT_PROFILE.userid]))
+            self.thread_handler(search)
 
-            if 'Аккаунт найден' in status_bar:
-                status_bar += '\nПоиск сторис'
+            idents = '\n' * count_idents
+            if self.CURRENT_STORY and self.CURRENT_STORY.itemcount > 0:
+                status_bar += f'{idents}✅ Сторис найдены'
+                self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             else:
-                status_bar += '\n\nПоиск сторис'
-            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-
-            self.STORY = next(self.INSTALOADER.get_stories([profile_id]))
-            if self.STORY and self.STORY.itemcount > 0:
-                status_bar = status_bar.replace('Поиск сторис', '✅ Сторис найдены')
-            else:
-                status_bar = status_bar.replace('Поиск сторис', '❌ Сторис не найдены')
+                status_bar += f'{idents}❌ Сторис не найдены'
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 return None
 
-        folder_stories = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.PROFILE.username}/stories"
+        # self.STOP_SEARCH = False
+        # self.download_status_bar(message, status_bar, 'Подготовка загрузки', count_idents=2)
+
+        folder_stories = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.CURRENT_PROFILE.username}/stories"
         if not os.path.exists(folder_stories):
             os.makedirs(folder_stories)
 
         story_data_array = []
         count_viewed = 0
 
-        for item in self.get_items():
-            filename = item.date_local.strftime('%d-%m-%Y_%H-%M-%S') + f'_{str(message.chat.id)}'
+        for item in self.CURRENT_STORY._node['items']:
+            date_local = datetime.fromtimestamp(item['taken_at_timestamp']).astimezone()
+            filename = date_local.strftime('%d-%m-%Y_%H-%M-%S') + f'_{str(message.chat.id)}'
             path = os.path.join(folder_stories, filename)
 
-            if item.is_video:
-                if not os.path.isfile(path + '.mp4'):
-                    story_data_array.append(StoryDataInstaloader('video', path + '.mp4', item.video_url))
+            if item['is_video']:
+                if not os.path.exists(path + '.mp4'):
+                    video_url = item['video_resources'][-1]['src']
+                    story_data_array.append(StoryDataInstaloader('video', path + '.mp4', video_url))
                 else: count_viewed += 1
             else:
-                if not os.path.isfile(path + ".jpg"):
-                    story_data_array.append(StoryDataInstaloader('photo', path + '.jpg', item.url))
+                if not os.path.exists(path + ".jpg"):
+                    photo_url = item['display_resources'][-1]['src']
+                    story_data_array.append(StoryDataInstaloader('photo', path + '.jpg', photo_url))
                 else: count_viewed += 1
+
+        # self.STOP_SEARCH = True
+        # time.sleep(0.1)
 
         count_downloads = 0
 
         if count_viewed > 0:
-            status_bar += (f'\n\nАктуальных сторис: {self.STORY.itemcount}'
+            status_bar += (f'\n\nАктуальных сторис: {self.CURRENT_STORY.itemcount}'
                            f'\nСкачано ранее: {count_viewed}')
-            if story_data_array:
-                status_bar += f'\n\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
+        if story_data_array:
+            status_bar += f'\n\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
+        self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+
+        for story_data in story_data_array:
+            resp = self.LOADER_WITHOUT_LOGIN.context.get_raw(story_data.url)
+            self.LOADER_WITHOUT_LOGIN.context.write_raw(resp, story_data.path)
+            print()
+            status_bar = status_bar.replace(f'[{count_downloads}/{len(story_data_array)}]',
+                                            f'[{count_downloads + 1}/{len(story_data_array)}]')
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+            count_downloads += 1
 
-            for story_data in story_data_array:
-                resp = self.INSTALOADER.context.get_raw(story_data.url)
-                self.INSTALOADER.context.write_raw(resp, story_data.path)
-                print()
-                status_bar = status_bar.replace(f'[{count_downloads}/{len(story_data_array)}]',
-                                                f'[{count_downloads + 1}/{len(story_data_array)}]')
-                self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-                count_downloads += 1
-        else:
-            status_bar += f'\n\nЗагружено: [{count_downloads}/{self.STORY.itemcount}]'
-            self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-
-            for story_data in story_data_array:
-                resp = self.INSTALOADER.context.get_raw(story_data.url)
-                self.INSTALOADER.context.write_raw(resp, story_data.path)
-                print()
-                status_bar = status_bar.replace(f'[{count_downloads}/{self.STORY.itemcount}]',
-                                                f'[{count_downloads + 1}/{self.STORY.itemcount}]')
-                self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-                count_downloads += 1
-
-        response = StoryResponseInstaloader(self.PROFILE.full_name, story_data_array,
-                                            self.STORY.itemcount, count_viewed, folder_stories)
-        self.STORY = None
+        response = StoryResponseInstaloader(self.CURRENT_PROFILE.full_name, story_data_array,
+                                            self.CURRENT_STORY.itemcount, count_viewed, folder_stories)
+        self.CURRENT_STORY = None
         return response
 
-    def get_items(self) -> Iterator[StoryItem]:
-        for item in self.STORY._node['items']:
-            yield StoryItem(self.STORY._context, item, self.STORY.owner_profile)
+
+    def download_status_bar(self, message: Message, status_bar: str, text_search: str, count_idents: int = 1):
+        smiles = ['◽', '◾']
+        idents = '\n' * count_idents
+
+        smile_cycle = itertools.cycle(smiles)
+
+        def await_load():
+            while not self.STOP_SEARCH:
+                text = f'{status_bar}{idents}{next(smile_cycle)} {text_search}'
+                self.BOT.edit_message_text(text, message.chat.id, message.message_id)
+                time.sleep(0.4)
+
+        self.EXECUTOR.submit(await_load)
+
+    def thread_handler(self, func):
+        self.STOP_SEARCH = False
+        func()
+        self.STOP_SEARCH = True
+        time.sleep(0.1)
+
 
 # def all_load():
 #     properties = configparser.ConfigParser()
 #     properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
 #     loader = Loader(properties, telebot.TeleBot(properties['TELEGRAM']['BOT']))
-#     loader.INSTALOADER.download_profile('username')
+#     loader.LOADER_WITHOUT_LOGIN.download_profile('username')

@@ -19,7 +19,7 @@ def create_profile_text(profile: Profile, story: instaloader.Story | None = None
     if profile.is_private:
         return (f'{start_text}'
                 f'<b>{profile.full_name}</b> - это закрытый профиль. Сторисы для просмотра недоступны')
-    if story.itemcount == 0:
+    if not story:
         return (f'{start_text}'
                 f'У <b>{profile.full_name}</b> в данный момент нет актуальных сторис.\n'
                 f'Попробуй прошерстить этот аккаунт позже')

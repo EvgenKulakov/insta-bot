@@ -12,6 +12,7 @@ from typing import Dict
 import configparser
 import time
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 
 class Loader:
@@ -22,8 +23,8 @@ class Loader:
     PROFILES_CACHE: Dict[str, Profile]
     CURRENT_STORY: Story | None
     BOT: TeleBot
-    STOP_SEARCH: bool
     EXECUTOR: ThreadPoolExecutor
+
     def __init__(self, properties: ConfigParser, BOT: TeleBot):
         self.PROPERTIES = properties
         user = self.PROPERTIES['INSTAGRAM']['USER']
@@ -36,25 +37,25 @@ class Loader:
         self.PROFILES_CACHE = {}
         self.CURRENT_STORY = None
         self.BOT = BOT
-        self.STOP_SEARCH = False
         self.EXECUTOR = ThreadPoolExecutor(max_workers=1)
         self.BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='✅ INSTALOADER start')
 
     def search_profile(self, username: str, message: Message) -> ProfileResponse:
+        event = Event()
         try:
             status_bar = message.text
 
-            def search():
-                self.download_status_bar(message, status_bar, 'Поиск аккаунта')
+            def search(event_stop: Event):
+                self.download_status_bar(message, status_bar, 'Поиск аккаунта', event_stop)
                 self.CURRENT_PROFILE = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
                 self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
-            self.thread_handler(search)
+            self.thread_handler(search, event)
 
             status_bar += '\n✅ Аккаунт найден'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             return self.profile_data(message, status_bar)
         except ProfileNotExistsException:
-            self.STOP_SEARCH = True
+            event.set()
             time.sleep(0.1)
             status_bar = message.text + '\n❌ Поиск аккаунта'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
@@ -69,21 +70,21 @@ class Loader:
             type_response = 'private'
             text_message = create_profile_text(self.CURRENT_PROFILE)
         else:
-            def search():
-                self.download_status_bar(message, status_bar, 'Проверка сторис')
-                self.CURRENT_STORY = next(self.INSTALOADER.get_stories([self.CURRENT_PROFILE.userid]))
-            self.thread_handler(search)
+            def search(event_stop: Event):
+                self.download_status_bar(message, status_bar, 'Проверка сторис', event_stop)
+                self.CURRENT_STORY = next(self.INSTALOADER.get_stories([self.CURRENT_PROFILE.userid]), None)
+            self.thread_handler(search, Event())
 
-            type_response = 'no_stories' if self.CURRENT_STORY.itemcount == 0 else 'has_stories'
+            type_response = 'no_stories' if not self.CURRENT_STORY else 'has_stories'
             text_message = create_profile_text(self.CURRENT_PROFILE, self.CURRENT_STORY)
 
             status_bar += '\n✅ Информация о сторис'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
-        self.STOP_SEARCH = False
-        self.download_status_bar(message, status_bar, 'Поиск фото')
+        event = Event()
+        self.download_status_bar(message, status_bar, 'Поиск фото', event)
         resp = self.LOADER_WITHOUT_LOGIN.context.get_raw(str(self.CURRENT_PROFILE.profile_pic_url))
-        self.STOP_SEARCH = True
+        event.set()
         time.sleep(0.1)
         status_bar += '\n✅ Фото профиля'
         self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
@@ -102,36 +103,38 @@ class Loader:
         return ProfileResponse(type_response, text_message, avatar_path, self.CURRENT_PROFILE.username)
 
     def download_stories(self, username: str, message: Message, time_created: str) -> StoryResponseInstaloader | None:
-        self.CURRENT_PROFILE = self.PROFILES_CACHE.get(username)
+        # self.CURRENT_PROFILE = self.PROFILES_CACHE.get(username)
         status_bar = message.text
-        if not self.CURRENT_PROFILE or not self.CURRENT_STORY or int(time.time()) - int(time_created) > 600:
-            if not self.CURRENT_PROFILE:
-                def search():
-                    self.download_status_bar(message, status_bar, 'Поиск аккаунта', count_idents=2)
-                    self.CURRENT_PROFILE = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
-                    self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
-                self.thread_handler(search)
+        if (not self.CURRENT_PROFILE or self.CURRENT_PROFILE.username != username
+                or not self.CURRENT_STORY or int(time.time()) - int(time_created) > 600):
 
-                status_bar += '\n\n✅ Аккаунт найден'
-                self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+            if not self.CURRENT_PROFILE or self.CURRENT_PROFILE.username != username:
+                self.CURRENT_PROFILE = self.PROFILES_CACHE.get(username)
+
+                if not self.CURRENT_PROFILE:
+                    def search(event_stop: Event):
+                        self.download_status_bar(message, status_bar, 'Поиск аккаунта', event_stop, count_idents=2)
+                        self.CURRENT_PROFILE = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
+                        self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
+                    self.thread_handler(search, Event())
+
+                    status_bar += '\n\n✅ Аккаунт найден'
+                    self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
             count_idents = 1 if 'Аккаунт найден' in status_bar else 2
-            def search():
-                self.download_status_bar(message, status_bar, 'Поиск сторис', count_idents=count_idents)
-                self.CURRENT_STORY = next(self.INSTALOADER.get_stories([self.CURRENT_PROFILE.userid]))
-            self.thread_handler(search)
+            def search(event_stop: Event):
+                self.download_status_bar(message, status_bar, 'Поиск сторис', event_stop, count_idents=count_idents)
+                self.CURRENT_STORY = next(self.INSTALOADER.get_stories([self.CURRENT_PROFILE.userid]), None)
+            self.thread_handler(search, Event())
 
             idents = '\n' * count_idents
-            if self.CURRENT_STORY and self.CURRENT_STORY.itemcount > 0:
+            if self.CURRENT_STORY:
                 status_bar += f'{idents}✅ Сторис найдены'
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             else:
                 status_bar += f'{idents}❌ Сторис не найдены'
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 return None
-
-        # self.STOP_SEARCH = False
-        # self.download_status_bar(message, status_bar, 'Подготовка загрузки', count_idents=2)
 
         folder_stories = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.CURRENT_PROFILE.username}/stories"
         if not os.path.exists(folder_stories):
@@ -155,9 +158,6 @@ class Loader:
                     photo_url = item['display_resources'][-1]['src']
                     story_data_array.append(StoryDataInstaloader('photo', path + '.jpg', photo_url))
                 else: count_viewed += 1
-
-        # self.STOP_SEARCH = True
-        # time.sleep(0.1)
 
         count_downloads = 0
 
@@ -183,24 +183,24 @@ class Loader:
         return response
 
 
-    def download_status_bar(self, message: Message, status_bar: str, text_search: str, count_idents: int = 1):
+    def download_status_bar(self, message: Message, status_bar: str, text_search: str,
+                            event_stop: Event, count_idents: int = 1):
         smiles = ['◽', '◾']
         idents = '\n' * count_idents
 
         smile_cycle = itertools.cycle(smiles)
 
-        def await_load():
-            while not self.STOP_SEARCH:
+        def await_load(event: Event):
+            while not event.is_set():
                 text = f'{status_bar}{idents}{next(smile_cycle)} {text_search}'
                 self.BOT.edit_message_text(text, message.chat.id, message.message_id)
                 time.sleep(0.4)
 
-        self.EXECUTOR.submit(await_load)
+        self.EXECUTOR.submit(lambda: await_load(event_stop))
 
-    def thread_handler(self, func):
-        self.STOP_SEARCH = False
-        func()
-        self.STOP_SEARCH = True
+    def thread_handler(self, func, event_stop: Event):
+        func(event_stop)
+        event_stop.set()
         time.sleep(0.1)
 
 

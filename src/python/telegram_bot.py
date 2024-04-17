@@ -1,22 +1,82 @@
+from typing import List
 from telebot import telebot, types
-from telebot.types import Message
+from telebot.types import Message, InlineKeyboardMarkup
 import configparser
 import instaloader_api
-from utils import valid_username, files_handler
+from utils import valid_username, files_handler, create_text_menu, get_start_text
 from dtos import ProfileResponse
 import time
+from database_service import Service
 
 
 properties = configparser.ConfigParser()
 properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
 
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
-LOADER = instaloader_api.Loader(properties, BOT)
-
+SERVICE = Service(properties)
+LOADER = instaloader_api.Loader(properties, BOT, SERVICE)
 
 @BOT.message_handler(commands=['start'])
 def read_start(message):
-    BOT.send_message(message.chat.id, text='hello')
+    text = get_start_text()
+    BOT.send_message(message.chat.id, text=text, parse_mode='HTML')
+
+@BOT.message_handler(commands=['menu'])
+def show_menu(message):
+    mode = 'query'
+    markup = get_menu_markup(message, mode)
+
+    if markup:
+        text = create_text_menu(mode)
+        BOT.send_message(message.chat.id, text=text, reply_markup=markup, parse_mode='HTML')
+    else:
+        BOT.send_message(message.chat.id, text='🧐 Здесь будет меню, когда ты сделаешь хотя бы 1 запрос')
+
+
+def get_menu_markup(message: Message, mode: str, usernames: List[str] | None = None) -> InlineKeyboardMarkup | None:
+    if not usernames:
+        usernames = SERVICE.get_profiles(message.chat.id)
+
+    if len(usernames) > 0:
+        mode_smiles = {'query': '🔍 ', 'analyzeNew': '🐝 ', 'remove': '❌ '}
+        markup = types.InlineKeyboardMarkup()
+        markup.row(
+            types.InlineKeyboardButton("Переключить режим >>", callback_data=f'mode|{mode}'),
+        )
+
+        for i in range(0, len(usernames), 2):
+            if i + 1 < len(usernames):
+                text_data1 = f'{mode}|{usernames[i]}|{int(time.time())}'
+                text_data2 = f'{mode}|{usernames[i + 1]}|{int(time.time())}'
+                row = [types.InlineKeyboardButton(text=f'{mode_smiles[mode]}{usernames[i]}', callback_data=text_data1),
+                       types.InlineKeyboardButton(text=f'{mode_smiles[mode]}{usernames[i + 1]}', callback_data=text_data2)]
+                markup.row(*row)
+            else:
+                text_data = f'{mode}|{usernames[i]}|{int(time.time())}'
+                markup.add(types.InlineKeyboardButton(text=f'{mode_smiles[mode]}{usernames[i]}', callback_data=text_data))
+
+        return markup
+    else:
+        return None
+
+
+@BOT.callback_query_handler(func=lambda call: call.data.startswith('mode'))
+def change_mode(callback_query):
+    mode = callback_query.data.split('|')[1]
+
+    if mode == 'query': mode = 'analyzeNew'
+    elif mode == 'analyzeNew': mode = 'remove'
+    elif mode == 'remove': mode = 'query'
+
+    markup = get_menu_markup(callback_query.message, mode)
+
+    if markup:
+        text = create_text_menu(mode)
+        BOT.edit_message_text(text, callback_query.message.chat.id, callback_query.message.message_id,
+                              parse_mode='HTML', reply_markup=markup)
+    else:
+        text = '🧐 Здесь будет меню, когда ты сделаешь хотя бы 1 запрос'
+        BOT.edit_message_text(text, callback_query.message.chat.id, callback_query.message.message_id)
 
 
 @BOT.message_handler()
@@ -111,6 +171,21 @@ def analyze(callback_query):
             message_id=callback_query.message.message_id,
             reply_markup=markup
         )
+
+
+@BOT.callback_query_handler(func=lambda call: call.data.startswith('remove'))
+def remove_history(callback_query):
+    telegram_id = callback_query.message.chat.id
+    mode, username, time_created = callback_query.data.split('|')
+    refresh_usernames = SERVICE.remove_profile(telegram_id, username)
+    markup = get_menu_markup(callback_query.message, mode, refresh_usernames)
+
+    if markup:
+        text = create_text_menu(mode)
+        BOT.edit_message_text(text, callback_query.message.chat.id, callback_query.message.message_id, reply_markup=markup)
+    else:
+        text = '🧐 Здесь будет меню, когда ты сделаешь хотя бы 1 запрос'
+        BOT.edit_message_text(text, callback_query.message.chat.id, callback_query.message.message_id)
 
 
 BOT.polling(none_stop=True)

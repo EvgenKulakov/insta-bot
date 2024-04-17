@@ -1,5 +1,4 @@
 import itertools
-import telebot
 from instaloader import Instaloader, Profile, ProfileNotExistsException, Story, StoryItem
 from telebot import TeleBot
 from telebot.types import Message
@@ -9,10 +8,11 @@ from datetime import datetime
 from dtos import ProfileResponse, StoryDataInstaloader, StoryResponseInstaloader
 from utils import create_profile_text
 from typing import Dict
-import configparser
 import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
+import sqlite3
+from database_service import Service
 
 
 class Loader:
@@ -24,8 +24,9 @@ class Loader:
     CURRENT_STORY: Story | None
     BOT: TeleBot
     EXECUTOR: ThreadPoolExecutor
+    SERVICE: Service
 
-    def __init__(self, properties: ConfigParser, BOT: TeleBot):
+    def __init__(self, properties: ConfigParser, BOT: TeleBot, SERVICE: Service):
         self.PROPERTIES = properties
         user = self.PROPERTIES['INSTAGRAM']['USER']
         session_token = self.PROPERTIES['INSTAGRAM']['TOKEN']
@@ -38,6 +39,7 @@ class Loader:
         self.CURRENT_STORY = None
         self.BOT = BOT
         self.EXECUTOR = ThreadPoolExecutor(max_workers=1)
+        self.SERVICE = SERVICE
         self.BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='✅ INSTALOADER start')
 
     def search_profile(self, username: str, message: Message) -> ProfileResponse:
@@ -49,6 +51,7 @@ class Loader:
                 self.download_status_bar(message, status_bar, 'Поиск аккаунта', event_stop)
                 self.CURRENT_PROFILE = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
                 self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
+                self.SERVICE.add_profile(message.chat.id, self.CURRENT_PROFILE.username)
             self.thread_handler(search, event)
 
             status_bar += '\n✅ Аккаунт найден'
@@ -202,10 +205,3 @@ class Loader:
         func(event_stop)
         event_stop.set()
         time.sleep(0.1)
-
-
-# def all_load():
-#     properties = configparser.ConfigParser()
-#     properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
-#     loader = Loader(properties, telebot.TeleBot(properties['TELEGRAM']['BOT']))
-#     loader.LOADER_WITHOUT_LOGIN.download_profile('username')

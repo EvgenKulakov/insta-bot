@@ -14,9 +14,9 @@ properties.read('src/resources/application.properties')
 
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
 SERVICE = Service(properties)
-LOADERS = {properties['TELEGRAM']['ADMIN_ID']: Loader(properties, BOT, SERVICE),
-           properties['TELEGRAM']['ANNA_ID']: Loader(properties, BOT, SERVICE),
-           properties['TELEGRAM']['DASHA_ID']: Loader(properties, BOT, SERVICE)}
+LOADERS = {int(properties['TELEGRAM']['ADMIN_ID']): Loader(properties, BOT, SERVICE),
+           int(properties['TELEGRAM']['ANNA_ID']): Loader(properties, BOT, SERVICE),
+           int(properties['TELEGRAM']['DASHA_ID']): Loader(properties, BOT, SERVICE)}
 
 @BOT.message_handler(commands=['start'])
 def read_start(message):

@@ -1,4 +1,14 @@
 pip freeze > requirements.txt
 pip install instaloader
 pip install pyTelegramBotAPI
-docker run --restart always -v cache:/app/cache --clock=host -d <image id or name>
+docker run --restart always -v cache:/app/cache -v database:/app/data -d <image id or name>
+
+
+import sqlite3
+conn = sqlite3.connect('data/profiles.db')
+cursor = conn.cursor()
+cursor.execute('SELECT * FROM profiles_history')
+rows = cursor.fetchall()
+for row in rows:
+    print(row)
+conn.close()

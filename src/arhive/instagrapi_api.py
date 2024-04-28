@@ -27,7 +27,7 @@ class Loader:
         def sign_in_session():
             username = self.PROPERTIES['INSTAGRAM']['USER']
             password = self.PROPERTIES['INSTAGRAM']['PASSWORD']
-            session = self.CLIENT.load_settings(self.PROPERTIES['INSTAGRAM']['DUMP'])
+            session = self.CLIENT.load_settings(self.PROPERTIES['PATHS']['PATH_OS'] + 'src/resources/dump.json')
             admin_id = int(self.PROPERTIES['TELEGRAM']['ADMIN_ID'])
 
             try:
@@ -43,7 +43,7 @@ class Loader:
                     self.CLIENT.set_settings({})
                     self.CLIENT.set_uuids(old_session["uuids"])
                     self.CLIENT.login(username, password)
-                    self.CLIENT.dump_settings(properties['INSTAGRAM']['DUMP_NEW'])
+                    self.CLIENT.dump_settings(self.PROPERTIES['PATHS']['PATH_OS'] + 'src/resources/dump.json')
             except Exception as e:
                 text = (f'Ошибка:\n'
                         f'Couldn\'t login user using session information: {e}\n'
@@ -74,7 +74,7 @@ class Loader:
         self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
         # avatar download
-        folder_avatar = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{user.username}/avatar"
+        folder_avatar = f"{self.PROPERTIES['PATHS']['PATH_OS']}cache/{user.username}/avatar"
         if not os.path.exists(folder_avatar):
             os.makedirs(folder_avatar)
         filename = 'avatar-default' # Сделать уникальный filename
@@ -127,7 +127,7 @@ class Loader:
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 return None
 
-        folder_stories = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{user_data.username}/stories"
+        folder_stories = f"{self.PROPERTIES['PATHS']['PATH_OS']}cache/{user_data.username}/stories"
         if not os.path.exists(folder_stories):
             os.makedirs(folder_stories)
 

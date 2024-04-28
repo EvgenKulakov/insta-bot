@@ -29,7 +29,7 @@ class Loader:
     def __init__(self, properties: ConfigParser, BOT: TeleBot, SERVICE: Service):
         self.PROPERTIES = properties
         user = self.PROPERTIES['INSTAGRAM']['USER']
-        session_token = self.PROPERTIES['INSTAGRAM']['TOKEN']
+        session_token = self.PROPERTIES['PATHS']['PATH_OS'] + 'src/resources/session-token'
 
         self.INSTALOADER = Instaloader()
         self.INSTALOADER.load_session_from_file(user, session_token)
@@ -92,7 +92,7 @@ class Loader:
         status_bar += '\n✅ Фото профиля'
         self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
 
-        folder_avatar = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.CURRENT_PROFILE.username}/avatar"
+        folder_avatar = f"{self.PROPERTIES['PATHS']['PATH_OS']}cache/{self.CURRENT_PROFILE.username}/avatar"
         if not os.path.exists(folder_avatar):
             os.makedirs(folder_avatar)
         date_avatar = datetime.strptime(resp.headers["Last-Modified"], "%a, %d %b %Y %H:%M:%S %Z")
@@ -106,7 +106,6 @@ class Loader:
         return ProfileResponse(type_response, text_message, avatar_path, self.CURRENT_PROFILE.username)
 
     def download_stories(self, username: str, message: Message, time_created: str) -> StoryResponseInstaloader | None:
-        # self.CURRENT_PROFILE = self.PROFILES_CACHE.get(username)
         status_bar = message.text
         if (not self.CURRENT_PROFILE or self.CURRENT_PROFILE.username != username
                 or not self.CURRENT_STORY or int(time.time()) - int(time_created) > 600):
@@ -139,7 +138,7 @@ class Loader:
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
                 return None
 
-        folder_stories = f"{self.PROPERTIES['INSTAGRAM']['CACHE_PATH']}/{self.CURRENT_PROFILE.username}/stories"
+        folder_stories = f"{self.PROPERTIES['PATHS']['PATH_OS']}cache/{self.CURRENT_PROFILE.username}/stories"
         if not os.path.exists(folder_stories):
             os.makedirs(folder_stories)
 

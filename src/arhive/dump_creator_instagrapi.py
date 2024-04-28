@@ -11,4 +11,4 @@ PASSWORD = properties['INSTAGRAM']['PASSWORD']
 
 cl = Client()
 cl.login(USERNAME, PASSWORD)
-cl.dump_settings(properties['INSTAGRAM']['DUMP'])
+cl.dump_settings(properties['PATHS']['PATH_OS'] + 'src/resources/dump.json')

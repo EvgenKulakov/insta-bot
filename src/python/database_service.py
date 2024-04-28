@@ -8,7 +8,7 @@ class Service:
     DATABASE_PATH: str
     def __init__(self, properties: ConfigParser):
         self.PROPERTIES = properties
-        self.DATABASE_PATH = self.PROPERTIES['DATABASE']['PATH']
+        self.DATABASE_PATH = self.PROPERTIES['PATHS']['PATH_OS'] + 'data/profiles.db'
 
     def add_profile(self, telegram_id: int, username: str):
         conn = sqlite3.connect(self.DATABASE_PATH)

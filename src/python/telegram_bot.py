@@ -10,7 +10,7 @@ from database_service import Service
 
 
 properties = configparser.ConfigParser()
-properties.read('src/resources/application.properties')
+properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
 
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
 SERVICE = Service(properties)

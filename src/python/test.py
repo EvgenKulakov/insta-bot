@@ -3,22 +3,117 @@ import os
 import threading
 import time
 import itertools
-
-
 import telebot
 import sqlite3
 import concurrent.futures
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from instaloader import Instaloader
+from utils import create_text_menu
+from database_service import Service
+from telebot import types
+from instaloader_iterator import InstaloaderIterator
+
 
 properties = configparser.ConfigParser()
 properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
 
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
+SERVICE = Service(properties)
 executor = ThreadPoolExecutor()
 
 event = threading.Event()
+
+user_1 = properties['INSTAGRAM']['USER_1']
+user_2 = properties['INSTAGRAM']['USER_1']
+session_token_1 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
+session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
+instaloader_1 = Instaloader()
+instaloader_1.load_session_from_file(user_1, session_token_1)
+instaloader_2 = Instaloader()
+instaloader_2.load_session_from_file(user_2, session_token_2)
+insta_iter = InstaloaderIterator([instaloader_1, instaloader_2])
+
+def test_cycle():
+
+    loader1 = next(insta_iter)
+    print(str(loader1) + 'loader1')
+
+    loader2 = next(insta_iter)
+    print(str(loader2) + 'loader2')
+
+    loader3 = next(insta_iter)
+    print(str(loader3) + 'loader3')
+
+    insta_iter.remove(loader2)
+
+    loader1 = next(insta_iter)
+    print(str(loader1) + 'loader1')
+
+    insta_iter.remove(loader1)
+
+    loader = next(insta_iter)
+    print(str(loader) + 'loader empty')
+
+    print('******')
+
+def test_cycle2():
+
+    loader1 = next(insta_iter)
+    print(str(loader1) + 'loader1')
+
+    loader2 = next(insta_iter)
+    print(str(loader2) + 'loader2')
+
+    loader3 = next(insta_iter)
+    print(str(loader3) + 'loader3')
+
+    insta_iter.add(instaloader_1)
+
+    loader1 = next(insta_iter)
+    print(str(loader1) + 'loader1')
+
+    insta_iter.add(instaloader_2)
+
+    loader = next(insta_iter)
+    print(str(loader) + 'loader empty')
+
+    print('******')
+
+executor.submit(test_cycle)
+executor.submit(test_cycle2)
+
+
+@BOT.message_handler(commands=['menu'])
+def show_menu(message):
+    mode = 'query'
+    markup = get_menu_markup(message, mode)
+
+    if markup:
+        text = create_text_menu(mode)
+        BOT.send_message(message.chat.id, text=text, reply_markup=markup, parse_mode='HTML')
+    else:
+        BOT.send_message(message.chat.id, text='🧐 Здесь будет меню, когда ты сделаешь хотя бы 1 запрос')
+
+
+@BOT.callback_query_handler(func=lambda call: call.data.startswith('mode'))
+def change_mode(callback_query):
+    mode = callback_query.data.split('|')[1]
+
+    if mode == 'query': mode = 'analyzeNew'
+    elif mode == 'analyzeNew': mode = 'remove'
+    elif mode == 'remove': mode = 'query'
+
+    markup = get_menu_markup(callback_query.message, mode)
+
+    if markup:
+        text = create_text_menu(mode)
+        BOT.edit_message_text(text, callback_query.message.chat.id, callback_query.message.message_id,
+                              parse_mode='HTML', reply_markup=markup)
+    else:
+        text = '🧐 Здесь будет меню, когда ты сделаешь хотя бы 1 запрос'
+        BOT.edit_message_text(text, callback_query.message.chat.id, callback_query.message.message_id)
+
 
 @BOT.message_handler()
 def read_message(message):
@@ -51,34 +146,26 @@ def read_message(message):
         stop_search = threading.Event()
         smiles = ['◽', '◾']
 
-        if not event.is_set():
-            event.set()
-            smile_cycle = itertools.cycle(smiles)
-            text_load = f'{next(smile_cycle)} Поиск аккаунта'
-            current_message = BOT.send_message(message.chat.id, text=text_load)
+        smile_cycle = itertools.cycle(smiles)
+        text_load = f'{next(smile_cycle)} Поиск аккаунта'
+        current_message = BOT.send_message(message.chat.id, text=text_load)
 
-            def await_load(stop_search):
-                num = 0
-                while not stop_search.is_set():
-                    # text = next(smile_cycle) + text_load[1:]
-                    num += 1
-                    BOT.edit_message_text(str(num), current_message.chat.id, current_message.message_id)
-                    time.sleep(0.5)
+        def await_load(stop_search):
+            num = 0
+            while not stop_search.is_set():
+                # text = next(smile_cycle) + text_load[1:]
+                num += 1
+                BOT.edit_message_text(str(num), current_message.chat.id, current_message.message_id)
+                time.sleep(0.5)
 
-            def load(stop_search, await_load):
-                executor.submit(lambda: await_load(stop_search))
-                time.sleep(13)
-                stop_search.set()
-                time.sleep(0.1)
-                BOT.edit_message_text('✅ Аккаунт найден', current_message.chat.id, current_message.message_id)
-                print(time.time() - start)
-            future = executor.submit(lambda: load(stop_search, await_load))
-            future.result()
-            event.clear()
-        else:
-            print('lock')
-
-    test_multy_treading(message)
+        def load(stop_search, await_load):
+            executor.submit(lambda: await_load(stop_search))
+            time.sleep(13)
+            stop_search.set()
+            time.sleep(0.1)
+            BOT.edit_message_text('✅ Аккаунт найден', current_message.chat.id, current_message.message_id)
+            print(time.time() - start)
+        executor.submit(lambda: load(stop_search, await_load))
 
     def test_instaloader(message):
         instaloader_1 = Instaloader()
@@ -109,4 +196,31 @@ def read_message(message):
             time.sleep(0.5)
 
 
-BOT.polling(none_stop=True)
+def get_menu_markup(message, mode: str, usernames = None):
+    if not usernames:
+        usernames = SERVICE.get_profiles(message.chat.id)
+
+    if len(usernames) > 0:
+        mode_smiles = {'query': '🔍 ', 'analyzeNew': '🐝 ', 'remove': '❌ '}
+        markup = types.InlineKeyboardMarkup()
+        markup.row(
+            types.InlineKeyboardButton("Переключить режим >>", callback_data=f'mode|{mode}'),
+        )
+
+        for i in range(0, len(usernames), 2):
+            if i + 1 < len(usernames):
+                text_data1 = f'{mode}|{usernames[i]}|{int(time.time())}'
+                text_data2 = f'{mode}|{usernames[i + 1]}|{int(time.time())}'
+                row = [types.InlineKeyboardButton(text=f'{mode_smiles[mode]}{usernames[i]}', callback_data=text_data1),
+                       types.InlineKeyboardButton(text=f'{mode_smiles[mode]}{usernames[i + 1]}', callback_data=text_data2)]
+                markup.row(*row)
+            else:
+                text_data = f'{mode}|{usernames[i]}|{int(time.time())}'
+                markup.add(types.InlineKeyboardButton(text=f'{mode_smiles[mode]}{usernames[i]}', callback_data=text_data))
+
+        return markup
+    else:
+        return None
+
+
+# BOT.polling(none_stop=True)

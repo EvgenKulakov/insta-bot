@@ -39,7 +39,7 @@ def create_profile_text(profile: Profile, story: instaloader.Story | None = None
 
 
 def create_text_insta_error(message: Message, loader_username: str, exception: Exception):
-    return (f'{message.chat.first_name} пыталась поискать сторисы, '
+    return (f'Пользователь {message.chat.first_name} пытался поискать сторисы, '
             f'но упал аккаунт {loader_username}\n'
             f'Лог ошипки:\n'
             f'{exception}')

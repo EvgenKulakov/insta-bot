@@ -78,15 +78,20 @@ class StoryResponse:
 
 class StoryResponseInstaloader:
     type: str
+    callback_type: str
+    username: str
     full_name: str | None
     story_data_array: List[StoryDataInstaloader] | None
     count_stories: int | None
     count_viewed: int | None
     folder_stories: str | None
 
-    def __init__(self, type: str, full_name: str | None = None, story_data_array: List[StoryDataInstaloader] | None = None,
-                 count_stories: int | None = None, count_viewed: int | None = None, folder_stories: str | None = None):
+    def __init__(self, type: str, callback_type: str, username: str, full_name: str | None = None,
+                 story_data_array: List[StoryDataInstaloader] | None = None,count_stories: int | None = None,
+                 count_viewed: int | None = None, folder_stories: str | None = None):
         self.type = type
+        self.callback_type = callback_type
+        self.username = username
         self.full_name = full_name
         self.story_data_array = story_data_array
         self.count_stories = count_stories

@@ -5,6 +5,7 @@ import re
 from typing import List
 import os
 from datetime import datetime, timedelta
+from telebot.types import Message
 
 
 def valid_username(username: str) -> bool:
@@ -35,6 +36,19 @@ def create_profile_text(profile: Profile, story: instaloader.Story | None = None
                 f'(последняя в {story.latest_media_local.strftime("%H:%M:%S")}).\n'
                 f'Я могу анонимно прошерстить этот аккаунт и переслать все сторис тебе.\n'
                 f'Прошерстить {profile.full_name}?')
+
+
+def create_text_insta_error(message: Message, loader_username: str, exception: Exception):
+    return (f'{message.chat.first_name} пыталась поискать сторисы, '
+            f'но упал аккаунт {loader_username}\n'
+            f'Лог ошипки:\n'
+            f'{exception}')
+
+
+def create_success_text(message: Message, loader_username: str):
+    return (f'Успешная игра в инста-бота:\n'
+            f'Жук: {message.chat.first_name}\n'
+            f'Инста-акк: {loader_username}')
 
 
 def create_text_menu(mode: str) -> str:

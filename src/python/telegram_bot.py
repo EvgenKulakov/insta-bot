@@ -7,16 +7,19 @@ from utils import valid_username, files_handler, create_text_menu, get_start_tex
 from dtos import ProfileResponse
 import time
 from database_service import Service
-
+from concurrent.futures import ThreadPoolExecutor
 
 properties = configparser.ConfigParser()
 properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
 
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
 SERVICE = Service(properties)
-LOADERS = {int(properties['TELEGRAM']['ADMIN_ID']): Loader(properties, BOT, SERVICE),
-           int(properties['TELEGRAM']['ANNA_ID']): Loader(properties, BOT, SERVICE),
-           int(properties['TELEGRAM']['DASHA_ID']): Loader(properties, BOT, SERVICE)}
+EXECUTOR = ThreadPoolExecutor()
+LOADERS = {int(properties['TELEGRAM']['ADMIN_ID']): Loader(properties, BOT, SERVICE, EXECUTOR),
+           int(properties['TELEGRAM']['ANNA_ID']): Loader(properties, BOT, SERVICE, EXECUTOR),
+           int(properties['TELEGRAM']['DASHA_ID']): Loader(properties, BOT, SERVICE, EXECUTOR)}
+BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='✅ INSTALOADER start')
+
 
 @BOT.message_handler(commands=['start'])
 def read_start(message):
@@ -103,9 +106,13 @@ def read_message(message):
     if loader:
         username = message.text.lower().strip()
         if valid_username(username):
-            status_bar = BOT.send_message(message.chat.id, text='Делаю запрос...')
-            response = loader.search_profile(username, status_bar)
-            query_handler(response, message)
+            if not loader.LOCK.is_set():
+                loader.LOCK.set()
+                status_bar = BOT.send_message(message.chat.id, text='Делаю запрос...')
+                future = EXECUTOR.submit(lambda: loader.search_profile(username, status_bar))
+                response = future.result()
+                query_handler(response, message)
+                loader.LOCK.clear()
         else:
             BOT.send_message(message.chat.id, text=f'❌ "{message.text}" - некорректный никнейм')
     else:
@@ -117,10 +124,13 @@ def read_message(message):
 def query(callback_query):
     loader = LOADERS.get(callback_query.message.chat.id)
     if loader:
-        status_bar = BOT.send_message(callback_query.message.chat.id, text='Делаю запрос...')
-        username = callback_query.data.split('|')[1]
-        response = loader.search_profile(username, status_bar)
-        query_handler(response, callback_query.message)
+        if not loader.LOCK.is_set():
+            loader.LOCK.set()
+            status_bar = BOT.send_message(callback_query.message.chat.id, text='Делаю запрос...')
+            username = callback_query.data.split('|')[1]
+            response = loader.search_profile(username, status_bar)
+            query_handler(response, callback_query.message)
+            loader.LOCK.clear()
     else:
         BOT.send_message(callback_query.message.chat.id, text='Нет доступа')
         BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='Левый пользователь. Лог:\n\n' + str(callback_query.message))
@@ -152,55 +162,62 @@ def query_handler(response: ProfileResponse, message: Message):
 def analyze(callback_query):
     loader = LOADERS.get(callback_query.message.chat.id)
     if loader:
-        callback_type, username, time_create = callback_query.data.split('|')
-        status_bar = BOT.send_message(callback_query.message.chat.id, text='Загружаю сторис...')
-        response = loader.download_stories(username, status_bar, time_create)
-        text_message: str
-        if response:
-            for story_data in response.story_data_array:
-                if story_data.content == 'photo':
-                    with open(story_data.path, 'rb') as photo:
-                        BOT.send_photo(callback_query.message.chat.id, photo)
-                if story_data.content == 'video':
-                    with open(story_data.path, 'rb') as video:
-                        BOT.send_video(callback_query.message.chat.id, video)
+        if not loader.LOCK.is_set():
+            loader.LOCK.set()
+            callback_type, username, time_create = callback_query.data.split('|')
+            status_bar = BOT.send_message(callback_query.message.chat.id, text='Загружаю сторис...')
+            response = loader.download_stories(username, status_bar, time_create)
+            text_message: str
+            if response.type == 'has_stories':
+                for story_data in response.story_data_array:
+                    if story_data.content == 'photo':
+                        with open(story_data.path, 'rb') as photo:
+                            BOT.send_photo(callback_query.message.chat.id, photo)
+                    if story_data.content == 'video':
+                        with open(story_data.path, 'rb') as video:
+                            BOT.send_video(callback_query.message.chat.id, video)
 
-            files_handler(response.story_data_array, response.folder_stories)
+                files_handler(response.story_data_array, response.folder_stories)
 
-            if not response.story_data_array:
-                if response.count_stories == 1:
-                    text_message = (f'<code>Инсташершень:</code>\n\n'
-                                    f'У <b>{response.full_name}</b> сейчас одна актуальная сторис.\n'
-                                    f'Я тебе уже отправлял эту сторис - попробуй прошерстить этот аккаунт позже')
-                else:
+                if not response.story_data_array:
+                    if response.count_stories == 1:
+                        text_message = (f'<code>Инсташершень:</code>\n\n'
+                                        f'У <b>{response.full_name}</b> сейчас одна актуальная сторис.\n'
+                                        f'Я тебе уже отправлял эту сторис - попробуй прошерстить этот аккаунт позже')
+                    else:
+                        text_message = (f'<code>Инсташершень:</code>\n\n'
+                                        f'У <b>{response.full_name}</b> {response.count_stories} актуальных сторис.\n'
+                                        f'Я тебе уже отправлял все эти сторис - попробуй прошерстить этот аккаунт позже')
+                elif response.count_viewed > 0:
                     text_message = (f'<code>Инсташершень:</code>\n\n'
                                     f'У <b>{response.full_name}</b> {response.count_stories} актуальных сторис.\n'
-                                    f'Я тебе уже отправлял все эти сторис - попробуй прошерстить этот аккаунт позже')
-            elif response.count_viewed > 0:
+                                    f'Я тебе отправил всего {len(response.story_data_array)} сторис, '
+                                    f'т.к. другие я тебе отправлял ранее')
+                else:
+                    text_message = (f'<code>Инсташершень:</code>\n\n'
+                                    f'Все актуальные сторис <b>{response.full_name}</b> отправлены')
+                BOT.send_message(callback_query.message.chat.id, text=text_message, parse_mode='HTML')
+            if response.type == 'no_stories':
                 text_message = (f'<code>Инсташершень:</code>\n\n'
-                                f'У <b>{response.full_name}</b> {response.count_stories} актуальных сторис.\n'
-                                f'Я тебе отправил всего {len(response.story_data_array)} сторис, '
-                                f'т.к. другие я тебе отправлял ранее')
-            else:
-                text_message = (f'<code>Инсташершень:</code>\n\n'
-                                f'Все актуальные сторис <b>{response.full_name}</b> отправлены')
-            BOT.send_message(callback_query.message.chat.id, text=text_message, parse_mode='HTML')
-        else:
-            text_message = ('<code>Инсташершень:</code>\n\n'
-                            'У данного аккаунта сейчас нет актуальных сторис, попробуй прошерстить его позже')
-            BOT.send_message(callback_query.message.chat.id, text=text_message, parse_mode='HTML')
+                                f'У <b>{response.full_name}</b> сейчас нет актуальных сторис, попробуй прошерстить его позже')
+                BOT.send_message(callback_query.message.chat.id, text=text_message, parse_mode='HTML')
+            if response.type == 'error_loader':
+                text_message = '❌ В данный момент нет ответа от instagram, попробуй сделать запрос позже — через 15-20 минут.'
+                BOT.send_message(callback_query.message.chat.id, text_message)
 
-        if callback_type == 'analyze':
-            markup = types.InlineKeyboardMarkup(row_width=2)
-            btn1 = types.InlineKeyboardButton(text='🔍 Новый запрос', callback_data=f'query|{username}')
-            btn2 = types.InlineKeyboardButton(text='🐝 Прошерстить',
-                                              callback_data=f'analyzeNew|{username}|{int(time.time())}')
-            markup.add(btn1, btn2)
-            BOT.edit_message_reply_markup(
-                chat_id=callback_query.message.chat.id,
-                message_id=callback_query.message.message_id,
-                reply_markup=markup
-            )
+
+            if callback_type == 'analyze':
+                markup = types.InlineKeyboardMarkup(row_width=2)
+                btn1 = types.InlineKeyboardButton(text='🔍 Новый запрос', callback_data=f'query|{username}')
+                btn2 = types.InlineKeyboardButton(text='🐝 Прошерстить',
+                                                  callback_data=f'analyzeNew|{username}|{int(time.time())}')
+                markup.add(btn1, btn2)
+                BOT.edit_message_reply_markup(
+                    chat_id=callback_query.message.chat.id,
+                    message_id=callback_query.message.message_id,
+                    reply_markup=markup
+                )
+            loader.LOCK.clear()
     else:
         BOT.send_message(callback_query.message.chat.id, text='Нет доступа')
         BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='Левый пользователь. Лог:\n\n' + str(callback_query.message))

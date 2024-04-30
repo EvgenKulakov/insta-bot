@@ -1,8 +1,6 @@
 .venv/
 .idea/
 __pycache__/
-/cache*
-session-token
-application.properties
-*dump.json
-data
+/cache/*
+/src/resources/*
+/data/*

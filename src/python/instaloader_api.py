@@ -1,23 +1,23 @@
 import itertools
-from instaloader import Instaloader, Profile, ProfileNotExistsException, Story, StoryItem
 from telebot import TeleBot
+from instaloader import Instaloader, Profile, ProfileNotExistsException, Story
 from telebot.types import Message
 from configparser import ConfigParser
 import os
 from datetime import datetime
 from dtos import ProfileResponse, StoryDataInstaloader, StoryResponseInstaloader
-from utils import create_profile_text
-from typing import Dict
+from utils import create_profile_text, create_text_insta_error
+from typing import Dict, Iterator
 import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
-import sqlite3
 from database_service import Service
 
 
 class Loader:
     PROPERTIES: ConfigParser
-    INSTALOADER: Instaloader
+    INSTALOADERS: Iterator[Instaloader]
+    CURRENT_LOADER: Instaloader | None
     LOADER_WITHOUT_LOGIN: Instaloader
     CURRENT_PROFILE: Profile | None
     PROFILES_CACHE: Dict[str, Profile]
@@ -25,22 +25,31 @@ class Loader:
     BOT: TeleBot
     EXECUTOR: ThreadPoolExecutor
     SERVICE: Service
+    LOCK: Event
 
-    def __init__(self, properties: ConfigParser, BOT: TeleBot, SERVICE: Service):
+    def __init__(self, properties: ConfigParser, BOT: TeleBot, SERVICE: Service, EXECUTOR: ThreadPoolExecutor):
         self.PROPERTIES = properties
-        user = self.PROPERTIES['INSTAGRAM']['USER']
-        session_token = self.PROPERTIES['PATHS']['PATH_OS'] + 'src/resources/session-token'
+        self.BOT = BOT
+        def loaders_init() -> Iterator[Instaloader]:
+            user_1 = self.PROPERTIES['INSTAGRAM']['USER_1']
+            # user_2 = self.PROPERTIES['INSTAGRAM']['USER_2']
+            session_token_1 = self.PROPERTIES['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
+            # session_token_2 = self.PROPERTIES['PATHS']['PATH_OS'] + 'src/resources/session-token-2'
+            instaloader_1 = Instaloader()
+            instaloader_1.load_session_from_file(user_1, session_token_1)
+            # instaloader_2 = Instaloader()
+            # instaloader_2.load_session_from_file(user_2, session_token_2)
+            return itertools.cycle([instaloader_1])
 
-        self.INSTALOADER = Instaloader()
-        self.INSTALOADER.load_session_from_file(user, session_token)
+        self.INSTALOADERS = loaders_init()
+        self.CURRENT_LOADER = None
         self.LOADER_WITHOUT_LOGIN = Instaloader()
         self.CURRENT_PROFILE = None
         self.PROFILES_CACHE = {}
         self.CURRENT_STORY = None
-        self.BOT = BOT
-        self.EXECUTOR = ThreadPoolExecutor(max_workers=1)
         self.SERVICE = SERVICE
-        self.BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='✅ INSTALOADER start')
+        self.EXECUTOR = EXECUTOR
+        self.LOCK = Event()
 
     def search_profile(self, username: str, message: Message) -> ProfileResponse:
         event = Event()
@@ -75,8 +84,32 @@ class Loader:
         else:
             def search(event_stop: Event):
                 self.download_status_bar(message, status_bar, 'Проверка сторис', event_stop)
-                self.CURRENT_STORY = next(self.INSTALOADER.get_stories([self.CURRENT_PROFILE.userid]), None)
+                self.CURRENT_LOADER = next(self.INSTALOADERS, None)
+                if self.CURRENT_LOADER:
+                    def try_get_stores():
+                        try:
+                            # self.CURRENT_STORY = next(self.CURRENT_LOADER.get_stories([self.CURRENT_PROFILE.userid]), None)
+                            5/0
+                        except Exception as exception:
+                            text = create_text_insta_error(message, self.CURRENT_LOADER.context.username, exception)
+                            self.BOT.send_message(self.PROPERTIES['TELEGRAM']['ADMIN_ID'], text)
+
+                            loaders_modify = list(self.INSTALOADERS)
+                            loaders_modify.remove(self.CURRENT_LOADER)
+                            self.INSTALOADERS = itertools.cycle(loaders_modify)
+                            self.CURRENT_LOADER = next(self.INSTALOADERS, None)
+
+                            if self.CURRENT_LOADER: try_get_stores()
+                    try_get_stores()
             self.thread_handler(search, Event())
+
+            if not self.CURRENT_LOADER:
+                text_for_admin = f'Все инста-аккаунты обосрались во время запроса {message.chat.first_name}'
+                self.BOT.send_message(self.PROPERTIES['TELEGRAM']['ADMIN_ID'], text=text_for_admin)
+                status_bar += '\n❌ Информация о сторис'
+                self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
+                text_message = '❌ В данный момент нет ответа от instagram, попробуй сделать запрос позже — через 15-20 минут.'
+                return ProfileResponse('error', text_message)
 
             type_response = 'no_stories' if not self.CURRENT_STORY else 'has_stories'
             text_message = create_profile_text(self.CURRENT_PROFILE, self.CURRENT_STORY)
@@ -103,9 +136,11 @@ class Loader:
             self.LOADER_WITHOUT_LOGIN.context.write_raw(resp, avatar_path)
             print()
 
+        text_for_admin = f'✅ Успешный поиск профиля у {message.chat.first_name}'
+        self.BOT.send_message(self.PROPERTIES['TELEGRAM']['ADMIN_ID'], text=text_for_admin)
         return ProfileResponse(type_response, text_message, avatar_path, self.CURRENT_PROFILE.username)
 
-    def download_stories(self, username: str, message: Message, time_created: str) -> StoryResponseInstaloader | None:
+    def download_stories(self, username: str, message: Message, time_created: str) -> StoryResponseInstaloader:
         status_bar = message.text
         if (not self.CURRENT_PROFILE or self.CURRENT_PROFILE.username != username
                 or not self.CURRENT_STORY or int(time.time()) - int(time_created) > 600):
@@ -126,17 +161,37 @@ class Loader:
             count_idents = 1 if 'Аккаунт найден' in status_bar else 2
             def search(event_stop: Event):
                 self.download_status_bar(message, status_bar, 'Поиск сторис', event_stop, count_idents=count_idents)
-                self.CURRENT_STORY = next(self.INSTALOADER.get_stories([self.CURRENT_PROFILE.userid]), None)
+                self.CURRENT_LOADER = next(self.INSTALOADERS, None)
+                if self.CURRENT_LOADER:
+                    def try_get_stores():
+                        try:
+                            self.CURRENT_STORY = next(self.CURRENT_LOADER.get_stories([self.CURRENT_PROFILE.userid]), None)
+                        except Exception as exception:
+                            text = create_text_insta_error(message, self.CURRENT_LOADER.context.username, exception)
+                            self.BOT.send_message(self.PROPERTIES['TELEGRAM']['ADMIN_ID'], text)
+
+                            loaders_modify = list(self.INSTALOADERS)
+                            loaders_modify.remove(self.CURRENT_LOADER)
+                            self.INSTALOADERS = iter(loaders_modify)
+                            self.CURRENT_LOADER = next(self.INSTALOADERS, None)
+
+                            if self.CURRENT_LOADER: try_get_stores()
+                    try_get_stores()
             self.thread_handler(search, Event())
 
             idents = '\n' * count_idents
-            if self.CURRENT_STORY:
+            if self.CURRENT_LOADER and self.CURRENT_STORY:
                 status_bar += f'{idents}✅ Сторис найдены'
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             else:
                 status_bar += f'{idents}❌ Сторис не найдены'
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-                return None
+                if not self.CURRENT_LOADER:
+                    text_for_admin = f'Все инста-аккаунты обосрались во время запроса {message.chat.first_name}'
+                    self.BOT.send_message(self.PROPERTIES['TELEGRAM']['ADMIN_ID'], text=text_for_admin)
+                    return StoryResponseInstaloader('error_loader')
+                if not self.CURRENT_STORY:
+                    return StoryResponseInstaloader('no_stories', self.CURRENT_PROFILE.full_name)
 
         folder_stories = f"{self.PROPERTIES['PATHS']['PATH_OS']}cache/{self.CURRENT_PROFILE.username}/stories"
         if not os.path.exists(folder_stories):
@@ -179,7 +234,10 @@ class Loader:
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             count_downloads += 1
 
-        response = StoryResponseInstaloader(self.CURRENT_PROFILE.full_name, story_data_array,
+        text_for_admin = f'✅ Успешный поиск сторис у {message.chat.first_name}'
+        self.BOT.send_message(self.PROPERTIES['TELEGRAM']['ADMIN_ID'], text=text_for_admin)
+
+        response = StoryResponseInstaloader('has_stories', self.CURRENT_PROFILE.full_name, story_data_array,
                                             self.CURRENT_STORY.itemcount, count_viewed, folder_stories)
         self.CURRENT_STORY = None
         return response

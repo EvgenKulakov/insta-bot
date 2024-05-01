@@ -1,6 +1,5 @@
 import instaloader
-from instaloader import Profile
-from dtos import StoryDataInstaloader
+from dtos import StoryDataInstaloader, ProfileDTO
 import re
 from typing import List
 import os
@@ -12,9 +11,11 @@ def valid_username(username: str) -> bool:
     pattern = r'^[a-zA-Z0-9._]{1,30}$'
     return re.match(pattern, username)
 
-def create_profile_text(profile: Profile, story: instaloader.Story | None = None) -> str:
+def create_profile_text(profile: ProfileDTO, story: instaloader.Story | None = None) -> str:
     start_text = (f'{profile.username}\n\n'
                   f'{profile.full_name}\n'
+                  f'Подписчики: {profile.followers} жал\n'
+                  f'Подписки: {profile.followees} жал\n\n'
                   f'{profile.biography}\n\n\n'
                   f'<pre>Комментарий инсташершня:</pre>\n')
     if profile.is_private:

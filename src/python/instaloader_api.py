@@ -5,7 +5,7 @@ from telebot.types import Message
 from configparser import ConfigParser
 import os
 from datetime import datetime
-from dtos import ProfileResponse, StoryDataInstaloader, StoryResponseInstaloader
+from dtos import ProfileResponse, StoryDataInstaloader, StoryResponseInstaloader, ProfileDTO
 from utils import create_profile_text, create_text_insta_error
 from typing import Dict
 import time
@@ -21,8 +21,8 @@ class Loader:
     INSTALOADERS: InstaloaderIterator
     CURRENT_LOADER: Instaloader | None
     LOADER_WITHOUT_LOGIN: Instaloader
-    CURRENT_PROFILE: Profile | None
-    PROFILES_CACHE: Dict[str, Profile]
+    CURRENT_PROFILE: ProfileDTO | None
+    PROFILES_CACHE: Dict[str, ProfileDTO]
     CURRENT_STORY: Story | None
     BOT: TeleBot
     EXECUTOR: ThreadPoolExecutor
@@ -54,7 +54,8 @@ class Loader:
 
             def search(event_stop: Event):
                 self.download_status_bar(message, status_bar, 'Поиск аккаунта', event_stop)
-                self.CURRENT_PROFILE = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
+                profile = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
+                self.CURRENT_PROFILE = ProfileDTO(profile)
                 self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
                 self.SERVICE.add_profile(message.chat.id, self.CURRENT_PROFILE.username)
             self.thread_handler(search, event)
@@ -100,7 +101,7 @@ class Loader:
                 self.BOT.send_message(self.ADMIN_ID, text=text_for_admin)
                 status_bar += '\n❌ Информация о сторис'
                 self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
-                text_message = '❌ В данный момент нет ответа от instagram, попробуй сделать запрос позже — через 15-20 минут.'
+                text_message = '❌ В данный момент нет ответа от Instagram, попробуй сделать запрос позже — через 15-20 минут.'
                 self.RESPONSE_HANDLER.query_handler(ProfileResponse('error', text_message), message)
                 return
 
@@ -112,7 +113,7 @@ class Loader:
 
         event = Event()
         self.download_status_bar(message, status_bar, 'Поиск фото', event)
-        resp = self.LOADER_WITHOUT_LOGIN.context.get_raw(str(self.CURRENT_PROFILE.profile_pic_url))
+        resp = self.LOADER_WITHOUT_LOGIN.context.get_raw(self.CURRENT_PROFILE.profile_pic_url)
         event.set()
         time.sleep(0.1)
         status_bar += '\n✅ Фото профиля'
@@ -145,7 +146,8 @@ class Loader:
                 if not self.CURRENT_PROFILE:
                     def search(event_stop: Event):
                         self.download_status_bar(status_message, status_bar, 'Поиск аккаунта', event_stop, count_idents=2)
-                        self.CURRENT_PROFILE = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
+                        profile = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
+                        self.CURRENT_PROFILE = ProfileDTO(profile)
                         self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
                     self.thread_handler(search, Event())
 

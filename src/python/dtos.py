@@ -1,4 +1,5 @@
 from typing import List
+from instaloader import Profile
 
 
 class UserResponse:
@@ -25,6 +26,27 @@ class ProfileResponse:
         self.text_message = text_message
         self.avatar_path = avatar_path
         self.username = username
+
+
+class ProfileDTO:
+    username: str
+    full_name: str
+    userid: int
+    is_private: bool
+    followers: int
+    followees: int
+    biography: str
+    profile_pic_url: str
+
+    def __init__(self, profile: Profile):
+        self.username = profile.username
+        self.full_name = profile.full_name
+        self.userid = profile.userid
+        self.is_private = profile.is_private
+        self.followers = profile.followers
+        self.followees = profile.followees
+        self.biography = profile.biography
+        self.profile_pic_url = profile.profile_pic_url
 
 
 class UserData:

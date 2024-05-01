@@ -77,7 +77,7 @@ class ResponseHandler:
                             f'У <b>{response.full_name}</b> сейчас нет актуальных сторис, попробуй прошерстить его позже')
             self.BOT.send_message(message.chat.id, text=text_message, parse_mode='HTML')
         if response.type == 'error_loader':
-            text_message = '❌ В данный момент нет ответа от instagram, попробуй сделать запрос позже — через 15-20 минут.'
+            text_message = '❌ В данный момент нет ответа от Instagram, попробуй сделать запрос позже — через 15-20 минут.'
             self.BOT.send_message(message.chat.id, text_message)
 
         if response.callback_type == 'analyze':

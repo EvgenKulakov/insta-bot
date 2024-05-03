@@ -1,6 +1,7 @@
 import itertools
 from telebot import TeleBot
-from instaloader import Instaloader, Profile, ProfileNotExistsException, Story
+from instaloader import Story
+from instaloader_lock_wrapper import InstaloaderWrapper
 from telebot.types import Message
 from configparser import ConfigParser
 import os
@@ -11,7 +12,6 @@ from typing import Dict
 import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
-from database_service import Service
 from response_handler import ResponseHandler
 from instaloader_iterator import InstaloaderIterator
 
@@ -19,29 +19,27 @@ from instaloader_iterator import InstaloaderIterator
 class Loader:
     PROPERTIES: ConfigParser
     INSTALOADERS: InstaloaderIterator
-    CURRENT_LOADER: Instaloader | None
-    LOADER_WITHOUT_LOGIN: Instaloader
+    CURRENT_LOADER: InstaloaderWrapper | None
+    LOADER_WITHOUT_LOGIN: InstaloaderWrapper
     CURRENT_PROFILE: ProfileDTO | None
     PROFILES_CACHE: Dict[str, ProfileDTO]
     CURRENT_STORY: Story | None
     BOT: TeleBot
     EXECUTOR: ThreadPoolExecutor
-    SERVICE: Service
     LOCK: Event
     ADMIN_ID: int
     RESPONSE_HANDLER: ResponseHandler
 
     def __init__(self, properties: ConfigParser, instaloaders: InstaloaderIterator,
-                 bot: TeleBot, service: Service, executor: ThreadPoolExecutor):
+                 loader_without_login: InstaloaderWrapper, bot: TeleBot, executor: ThreadPoolExecutor):
         self.PROPERTIES = properties
         self.INSTALOADERS = instaloaders
         self.BOT = bot
         self.CURRENT_LOADER = None
-        self.LOADER_WITHOUT_LOGIN = Instaloader()
+        self.LOADER_WITHOUT_LOGIN = loader_without_login
         self.CURRENT_PROFILE = None
         self.PROFILES_CACHE = {}
         self.CURRENT_STORY = None
-        self.SERVICE = service
         self.EXECUTOR = executor
         self.LOCK = Event()
         self.ADMIN_ID = int(self.PROPERTIES['TELEGRAM']['ADMIN_ID'])
@@ -49,27 +47,25 @@ class Loader:
 
     def search_profile(self, username: str, message: Message):
         event = Event()
-        try:
-            status_bar = message.text
+        status_bar = message.text
 
-            def search(event_stop: Event):
-                self.download_status_bar(message, status_bar, 'Поиск аккаунта', event_stop)
-                profile = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
-                self.CURRENT_PROFILE = ProfileDTO(profile)
-                self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
-                self.SERVICE.add_profile(message.chat.id, self.CURRENT_PROFILE.username)
-            self.thread_handler(search, event)
+        def search(event_stop: Event):
+            self.download_status_bar(message, status_bar, 'Поиск аккаунта', event_stop)
+            profile = self.LOADER_WITHOUT_LOGIN.profile_from_username(username, message.chat.id)
+            self.CURRENT_PROFILE = ProfileDTO(profile) if profile else None
+        self.thread_handler(search, event)
 
+        if self.CURRENT_PROFILE:
+            self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
             status_bar += '\n✅ Аккаунт найден'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             self.profile_data(message, status_bar)
-        except ProfileNotExistsException:
-            event.set()
-            time.sleep(0.1)
+        else:
             status_bar = message.text + '\n❌ Поиск аккаунта'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             text_message = f'Аккаунта "{username}" нет в инстаграм'
             self.RESPONSE_HANDLER.query_handler(ProfileResponse('error', text_message), message)
+
 
     def profile_data(self, message: Message, status_bar: str):
         type_response: str
@@ -85,9 +81,9 @@ class Loader:
                 if self.CURRENT_LOADER:
                     def try_get_stores():
                         try:
-                            self.CURRENT_STORY = next(self.CURRENT_LOADER.get_stories([self.CURRENT_PROFILE.userid]), None)
+                            self.CURRENT_STORY = self.CURRENT_LOADER.get_stories(self.CURRENT_PROFILE.userid)
                         except Exception as exception:
-                            text = create_text_insta_error(message, self.CURRENT_LOADER.context.username, exception)
+                            text = create_text_insta_error(message, self.CURRENT_LOADER.get_context().username, exception)
                             self.BOT.send_message(self.ADMIN_ID, text)
 
                             self.INSTALOADERS.remove(self.CURRENT_LOADER)
@@ -113,7 +109,7 @@ class Loader:
 
         event = Event()
         self.download_status_bar(message, status_bar, 'Поиск фото', event)
-        resp = self.LOADER_WITHOUT_LOGIN.context.get_raw(self.CURRENT_PROFILE.profile_pic_url)
+        resp = self.LOADER_WITHOUT_LOGIN.get_context().get_raw(self.CURRENT_PROFILE.profile_pic_url)
         event.set()
         time.sleep(0.1)
         status_bar += '\n✅ Фото профиля'
@@ -127,15 +123,15 @@ class Loader:
         avatar_path = os.path.join(folder_avatar, filename)
 
         if not os.path.exists(avatar_path):
-            self.LOADER_WITHOUT_LOGIN.context.write_raw(resp, avatar_path)
+            self.LOADER_WITHOUT_LOGIN.get_context().write_raw(resp, avatar_path)
             print()
 
         response = ProfileResponse(type_response, text_message, avatar_path, self.CURRENT_PROFILE.username)
-        self.RESPONSE_HANDLER.query_handler(response, message, self.CURRENT_LOADER.context.username)
+        self.RESPONSE_HANDLER.query_handler(response, message, self.CURRENT_LOADER.get_context().username)
 
 
     def download_stories(self, callback_type: str, username: str, status_message: Message,
-                         current_message: Message, time_created: str):
+                         src_message: Message, time_created: str):
         status_bar = status_message.text
         if (not self.CURRENT_PROFILE or self.CURRENT_PROFILE.username != username
                 or not self.CURRENT_STORY or int(time.time()) - int(time_created) > 600):
@@ -146,7 +142,7 @@ class Loader:
                 if not self.CURRENT_PROFILE:
                     def search(event_stop: Event):
                         self.download_status_bar(status_message, status_bar, 'Поиск аккаунта', event_stop, count_idents=2)
-                        profile = Profile.from_username(self.LOADER_WITHOUT_LOGIN.context, username)
+                        profile = self.LOADER_WITHOUT_LOGIN.profile_from_username(username, src_message.chat.id)
                         self.CURRENT_PROFILE = ProfileDTO(profile)
                         self.PROFILES_CACHE[self.CURRENT_PROFILE.username] = self.CURRENT_PROFILE
                     self.thread_handler(search, Event())
@@ -161,9 +157,9 @@ class Loader:
                 if self.CURRENT_LOADER:
                     def try_get_stores():
                         try:
-                            self.CURRENT_STORY = next(self.CURRENT_LOADER.get_stories([self.CURRENT_PROFILE.userid]), None)
-                        except Exception as exception:
-                            text = create_text_insta_error(status_message, self.CURRENT_LOADER.context.username, exception)
+                            self.CURRENT_STORY = self.CURRENT_LOADER.get_stories(self.CURRENT_PROFILE.userid)
+                        except Exception as ex:
+                            text = create_text_insta_error(status_message, self.CURRENT_LOADER.get_context().username, ex)
                             self.BOT.send_message(self.ADMIN_ID, text)
 
                             self.INSTALOADERS.remove(self.CURRENT_LOADER)
@@ -183,11 +179,11 @@ class Loader:
                     text_for_admin = f'Все инста-аккаунты обосрались во время запроса {status_message.chat.first_name}'
                     self.BOT.send_message(self.ADMIN_ID, text=text_for_admin)
                     response = StoryResponseInstaloader('error_loader', callback_type, username)
-                    self.RESPONSE_HANDLER.hornet_handler(response, current_message)
+                    self.RESPONSE_HANDLER.hornet_handler(response, src_message)
                     return
                 if not self.CURRENT_STORY:
                     response = StoryResponseInstaloader('no_stories', callback_type, username, self.CURRENT_PROFILE.full_name)
-                    self.RESPONSE_HANDLER.hornet_handler(response, current_message, self.CURRENT_LOADER.context.username)
+                    self.RESPONSE_HANDLER.hornet_handler(response, src_message, self.CURRENT_LOADER.get_context().username)
                     return
 
         folder_stories = f"{self.PROPERTIES['PATHS']['PATH_OS']}cache/{self.CURRENT_PROFILE.username}/stories"
@@ -223,8 +219,8 @@ class Loader:
         self.BOT.edit_message_text(status_bar, status_message.chat.id, status_message.message_id)
 
         for story_data in story_data_array:
-            resp = self.LOADER_WITHOUT_LOGIN.context.get_raw(story_data.url)
-            self.LOADER_WITHOUT_LOGIN.context.write_raw(resp, story_data.path)
+            resp = self.LOADER_WITHOUT_LOGIN.get_context().get_raw(story_data.url)
+            self.LOADER_WITHOUT_LOGIN.get_context().write_raw(resp, story_data.path)
             print()
             status_bar = status_bar.replace(f'[{count_downloads}/{len(story_data_array)}]',
                                             f'[{count_downloads + 1}/{len(story_data_array)}]')
@@ -234,7 +230,7 @@ class Loader:
         response = StoryResponseInstaloader('has_stories', callback_type, username, self.CURRENT_PROFILE.full_name,
                                             story_data_array, self.CURRENT_STORY.itemcount, count_viewed, folder_stories)
         self.CURRENT_STORY = None
-        self.RESPONSE_HANDLER.hornet_handler(response, current_message, self.CURRENT_LOADER.context.username)
+        self.RESPONSE_HANDLER.hornet_handler(response, src_message, self.CURRENT_LOADER.get_context().username)
 
 
     def download_status_bar(self, message: Message, status_bar: str, text_search: str,

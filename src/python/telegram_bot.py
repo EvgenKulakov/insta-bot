@@ -9,28 +9,33 @@ from utils import valid_username, create_text_menu, get_start_text
 import time
 from database_service import Service
 from concurrent.futures import ThreadPoolExecutor
+from instaloader_lock_wrapper import InstaloaderWrapper
 
 properties = configparser.ConfigParser()
 properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
 
+SERVICE = Service(properties)
+
 def loaders_init() -> InstaloaderIterator:
     user_1 = properties['INSTAGRAM']['USER_1']
-    user_2 = properties['INSTAGRAM']['USER_2']
+    # user_2 = properties['INSTAGRAM']['USER_2']
     session_token_1 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
-    session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-2'
+    # session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-2'
     instaloader_1 = Instaloader()
     instaloader_1.load_session_from_file(user_1, session_token_1)
-    instaloader_2 = Instaloader()
-    instaloader_2.load_session_from_file(user_2, session_token_2)
-    return InstaloaderIterator([instaloader_1, instaloader_2])
+    instaloader_wrapper_1 = InstaloaderWrapper(instaloader_1, SERVICE)
+    # instaloader_2 = Instaloader()
+    # instaloader_2.load_session_from_file(user_2, session_token_2)
+    # instaloader_wrapper_2 = InstaloaderWrapper(instaloader_2, SERVICE)
+    return InstaloaderIterator([instaloader_wrapper_1])
 
 INSTALOADERS = loaders_init()
+LOADER_WITH_LOGIN = InstaloaderWrapper(Instaloader(), SERVICE)
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
-SERVICE = Service(properties)
 EXECUTOR = ThreadPoolExecutor()
-LOADERS = {int(properties['TELEGRAM']['ADMIN_ID']): Loader(properties, INSTALOADERS, BOT, SERVICE, EXECUTOR),
-           int(properties['TELEGRAM']['ANNA_ID']): Loader(properties, INSTALOADERS, BOT, SERVICE, EXECUTOR),
-           int(properties['TELEGRAM']['DASHA_ID']): Loader(properties, INSTALOADERS, BOT, SERVICE, EXECUTOR)}
+LOADERS = {int(properties['TELEGRAM']['ADMIN_ID']): Loader(properties, INSTALOADERS, LOADER_WITH_LOGIN, BOT, EXECUTOR),
+           int(properties['TELEGRAM']['ANNA_ID']): Loader(properties, INSTALOADERS, LOADER_WITH_LOGIN, BOT, EXECUTOR),
+           int(properties['TELEGRAM']['DASHA_ID']): Loader(properties, INSTALOADERS, LOADER_WITH_LOGIN, BOT, EXECUTOR)}
 BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='✅ INSTABOT start')
 
 

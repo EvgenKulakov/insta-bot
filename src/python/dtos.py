@@ -119,3 +119,12 @@ class StoryResponseInstaloader:
         self.count_stories = count_stories
         self.count_viewed = count_viewed
         self.folder_stories = folder_stories
+
+
+class SuccessFailDTO:
+    username: str
+    type: str
+
+    def __init__(self, username: str, type: str):
+        self.username = username
+        self.type = type

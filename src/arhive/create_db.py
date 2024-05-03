@@ -7,8 +7,8 @@ conn = sqlite3.connect('/home/evgeniy/PycharmProjects/insta-bot/data/profiles.db
 cursor = conn.cursor()
 
 # Создание таблицы
-cursor.execute('''CREATE TABLE IF NOT EXISTS profiles_history
-                  (id INTEGER PRIMARY KEY, telegram_id INTEGER, username TEXT)''')
+cursor.execute('''CREATE TABLE IF NOT EXISTS success_fail_profiles
+                  (id INTEGER PRIMARY KEY, username TEXT UNIQUE ON CONFLICT REPLACE, type TEXT)''')
 
 # Вставка данных
 # cursor.execute("INSERT INTO profiles_history (telegram_id, username) VALUES (?, ?)", (123, 'name'))

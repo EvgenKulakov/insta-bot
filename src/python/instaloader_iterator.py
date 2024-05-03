@@ -1,15 +1,15 @@
 from typing import List
-from instaloader import Instaloader
 from threading import Lock
+from instaloader_lock_wrapper import InstaloaderWrapper
 
 
 class InstaloaderIterator:
-    INSTALOADERS: List[Instaloader]
+    INSTALOADERS: List[InstaloaderWrapper]
     INDEX: int
     LOCK: Lock
 
-    def __init__(self, INSTALOADERS: List[Instaloader]):
-        self.INSTALOADERS = INSTALOADERS
+    def __init__(self, instaloaders: List[InstaloaderWrapper]):
+        self.INSTALOADERS = instaloaders
         self.INDEX = 0
         self.LOCK = Lock()
 

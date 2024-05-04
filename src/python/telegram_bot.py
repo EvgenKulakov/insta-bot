@@ -10,9 +10,14 @@ import time
 from database_service import Service
 from concurrent.futures import ThreadPoolExecutor
 from instaloader_lock_wrapper import InstaloaderWrapper
+import os
 
 properties = configparser.ConfigParser()
 properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
+
+proxy_url = properties['PROXY']['PROXY_URL']
+os.environ['HTTP_PROXY'] = proxy_url
+os.environ['HTTPS_PROXY'] = proxy_url
 
 SERVICE = Service(properties)
 

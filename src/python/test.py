@@ -3,6 +3,8 @@ import os
 import threading
 import time
 import itertools
+
+import requests
 import telebot
 import sqlite3
 import concurrent.futures
@@ -24,65 +26,60 @@ executor = ThreadPoolExecutor()
 
 event = threading.Event()
 
-user_1 = properties['INSTAGRAM']['USER_1']
-user_2 = properties['INSTAGRAM']['USER_1']
-session_token_1 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
-session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
-instaloader_1 = Instaloader()
-instaloader_1.load_session_from_file(user_1, session_token_1)
-instaloader_2 = Instaloader()
-instaloader_2.load_session_from_file(user_2, session_token_2)
-insta_iter = InstaloaderIterator([instaloader_1, instaloader_2])
+# user_1 = properties['INSTAGRAM']['USER_1']
+# user_2 = properties['INSTAGRAM']['USER_1']
+# session_token_1 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
+# session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
+# instaloader_1 = Instaloader()
+# instaloader_1.load_session_from_file(user_1, session_token_1)
+# instaloader_2 = Instaloader()
+# instaloader_2.load_session_from_file(user_2, session_token_2)
+# insta_iter = InstaloaderIterator([instaloader_1, instaloader_2])
 
-def test_cycle():
-
-    loader1 = next(insta_iter)
-    print(str(loader1) + 'loader1')
-
-    loader2 = next(insta_iter)
-    print(str(loader2) + 'loader2')
-
-    loader3 = next(insta_iter)
-    print(str(loader3) + 'loader3')
-
-    insta_iter.remove(loader2)
-
-    loader1 = next(insta_iter)
-    print(str(loader1) + 'loader1')
-
-    insta_iter.remove(loader1)
-
-    loader = next(insta_iter)
-    print(str(loader) + 'loader empty')
-
-    print('******')
-
-def test_cycle2():
-
-    loader1 = next(insta_iter)
-    print(str(loader1) + 'loader1')
-
-    loader2 = next(insta_iter)
-    print(str(loader2) + 'loader2')
-
-    loader3 = next(insta_iter)
-    print(str(loader3) + 'loader3')
-
-    insta_iter.add(instaloader_1)
-
-    loader1 = next(insta_iter)
-    print(str(loader1) + 'loader1')
-
-    insta_iter.add(instaloader_2)
-
-    loader = next(insta_iter)
-    print(str(loader) + 'loader empty')
-
-    print('******')
-
-executor.submit(test_cycle)
-executor.submit(test_cycle2)
-
+# def test_cycle():
+#
+#     loader1 = next(insta_iter)
+#     print(str(loader1) + 'loader1')
+#
+#     loader2 = next(insta_iter)
+#     print(str(loader2) + 'loader2')
+#
+#     loader3 = next(insta_iter)
+#     print(str(loader3) + 'loader3')
+#
+#     insta_iter.remove(loader2)
+#
+#     loader1 = next(insta_iter)
+#     print(str(loader1) + 'loader1')
+#
+#     insta_iter.remove(loader1)
+#
+#     loader = next(insta_iter)
+#     print(str(loader) + 'loader empty')
+#
+#     print('******')
+# def test_cycle2():
+#
+#     loader1 = next(insta_iter)
+#     print(str(loader1) + 'loader1')
+#
+#     loader2 = next(insta_iter)
+#     print(str(loader2) + 'loader2')
+#
+#     loader3 = next(insta_iter)
+#     print(str(loader3) + 'loader3')
+#
+#     insta_iter.add(instaloader_1)
+#
+#     loader1 = next(insta_iter)
+#     print(str(loader1) + 'loader1')
+#
+#     insta_iter.add(instaloader_2)
+#
+#     loader = next(insta_iter)
+#     print(str(loader) + 'loader empty')
+#
+#     print('******')
 
 @BOT.message_handler(commands=['menu'])
 def show_menu(message):
@@ -166,7 +163,6 @@ def read_message(message):
             BOT.edit_message_text('✅ Аккаунт найден', current_message.chat.id, current_message.message_id)
             print(time.time() - start)
         executor.submit(lambda: load(stop_search, await_load))
-
     def test_instaloader(message):
         instaloader_1 = Instaloader()
         instaloader_1.load_session_from_file(properties['INSTAGRAM']['USER_1'],
@@ -195,7 +191,6 @@ def read_message(message):
             print(str(num) + message.text + 'main')
             time.sleep(0.5)
 
-
 def get_menu_markup(message, mode: str, usernames = None):
     if not usernames:
         usernames = SERVICE.get_profiles(message.chat.id)
@@ -221,6 +216,20 @@ def get_menu_markup(message, mode: str, usernames = None):
         return markup
     else:
         return None
+
+
+def test_proxy():
+    proxy_url = properties['PROXY']['PROXY_URL']
+    os.environ['HTTP_PROXY'] = proxy_url
+    os.environ['HTTPS_PROXY'] = proxy_url
+
+    response = requests.get('https://api.ipify.org?format=json')
+    if response.status_code == 200:
+        data = response.json()
+        ip_address = data.get('ip')
+        print("IP адрес:", ip_address)
+    else:
+        print("Ошибка при получении IP адреса:", response.status_code)
 
 
 # BOT.polling(none_stop=True)

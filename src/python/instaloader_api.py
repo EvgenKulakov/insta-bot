@@ -81,7 +81,7 @@ class Loader:
                 if self.CURRENT_LOADER:
                     def try_get_stores():
                         try:
-                            self.CURRENT_STORY = self.CURRENT_LOADER.get_stories(self.CURRENT_PROFILE.userid)
+                            self.CURRENT_STORY = self.CURRENT_LOADER.loader_get_stories(self.CURRENT_PROFILE.userid)
                         except Exception as exception:
                             text = create_text_insta_error(message, self.CURRENT_LOADER.get_context().username, exception)
                             self.BOT.send_message(self.ADMIN_ID, text)
@@ -157,7 +157,7 @@ class Loader:
                 if self.CURRENT_LOADER:
                     def try_get_stores():
                         try:
-                            self.CURRENT_STORY = self.CURRENT_LOADER.get_stories(self.CURRENT_PROFILE.userid)
+                            self.CURRENT_STORY = self.CURRENT_LOADER.loader_get_stories(self.CURRENT_PROFILE.userid)
                         except Exception as ex:
                             text = create_text_insta_error(status_message, self.CURRENT_LOADER.get_context().username, ex)
                             self.BOT.send_message(self.ADMIN_ID, text)

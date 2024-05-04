@@ -34,7 +34,7 @@ class InstaloaderWrapper:
                     return None
 
 
-    def get_stories(self, userid: int) -> Story | None:
+    def loader_get_stories(self, userid: int) -> Story | None:
         with self.LOCK:
             story = next(self.INSTALOADER.get_stories([userid]), None)
             return story

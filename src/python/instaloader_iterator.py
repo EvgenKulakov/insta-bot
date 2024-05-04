@@ -33,4 +33,5 @@ class InstaloaderIterator:
                 self.INDEX = 0
 
     def get_size(self):
-        return len(self.INSTALOADERS)
+        with self.LOCK:
+            return len(self.INSTALOADERS)

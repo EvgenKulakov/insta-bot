@@ -13,7 +13,7 @@ def valid_username(username: str) -> bool:
 
 def create_profile_text(profile: ProfileDTO, story: instaloader.Story | None = None) -> str:
     start_text = (f'{profile.username}\n\n'
-                  f'{profile.full_name}\n'
+                  f'<b>{profile.full_name}</b>\n'
                   f'Подписчики: {profile.followers} жал\n'
                   f'Подписки: {profile.followees} жал\n\n'
                   f'{profile.biography}\n\n\n'
@@ -40,7 +40,7 @@ def create_profile_text(profile: ProfileDTO, story: instaloader.Story | None = N
 
 
 def create_text_insta_error(message: Message, loader_username: str, exception: Exception):
-    return (f'Пользователь {message.chat.first_name} пытался поискать сторисы, '
+    return (f'Пользователь {message.chat.first_name} пытался поиграть, '
             f'но упал аккаунт {loader_username}\n'
             f'Лог ошипки:\n'
             f'{exception}')

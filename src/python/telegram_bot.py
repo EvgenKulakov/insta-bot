@@ -11,6 +11,7 @@ from database_service import Service
 from concurrent.futures import ThreadPoolExecutor
 from instaloader_lock_wrapper import InstaloaderWrapper
 import os
+from threading import Event
 
 properties = configparser.ConfigParser()
 properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
@@ -23,24 +24,25 @@ SERVICE = Service(properties)
 
 def loaders_init() -> InstaloaderIterator:
     user_1 = properties['INSTAGRAM']['USER_1']
-    # user_2 = properties['INSTAGRAM']['USER_2']
+    user_2 = properties['INSTAGRAM']['USER_2']
     session_token_1 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
-    # session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-2'
+    session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-2'
+    loader_without_login = Instaloader()
     instaloader_1 = Instaloader()
     instaloader_1.load_session_from_file(user_1, session_token_1)
-    instaloader_wrapper_1 = InstaloaderWrapper(instaloader_1, SERVICE)
-    # instaloader_2 = Instaloader()
-    # instaloader_2.load_session_from_file(user_2, session_token_2)
-    # instaloader_wrapper_2 = InstaloaderWrapper(instaloader_2, SERVICE)
-    return InstaloaderIterator([instaloader_wrapper_1])
+    instaloader_wrapper_1 = InstaloaderWrapper(instaloader_1, loader_without_login, SERVICE)
+    instaloader_2 = Instaloader()
+    instaloader_2.load_session_from_file(user_2, session_token_2)
+    instaloader_wrapper_2 = InstaloaderWrapper(instaloader_2,loader_without_login, SERVICE)
+    return InstaloaderIterator([instaloader_wrapper_1, instaloader_wrapper_2])
 
 INSTALOADERS = loaders_init()
-LOADER_WITH_LOGIN = InstaloaderWrapper(Instaloader(), SERVICE)
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
 EXECUTOR = ThreadPoolExecutor()
-LOADERS = {int(properties['TELEGRAM']['ADMIN_ID']): Loader(properties, INSTALOADERS, LOADER_WITH_LOGIN, BOT, EXECUTOR),
-           int(properties['TELEGRAM']['ANNA_ID']): Loader(properties, INSTALOADERS, LOADER_WITH_LOGIN, BOT, EXECUTOR),
-           int(properties['TELEGRAM']['DASHA_ID']): Loader(properties, INSTALOADERS, LOADER_WITH_LOGIN, BOT, EXECUTOR)}
+LOADERS = {int(properties['TELEGRAM']['ADMIN_ID']): Loader(properties, INSTALOADERS, BOT, EXECUTOR),
+           int(properties['TELEGRAM']['ANNA_ID']): Loader(properties, INSTALOADERS, BOT, EXECUTOR),
+           int(properties['TELEGRAM']['DASHA_ID']): Loader(properties, INSTALOADERS, BOT, EXECUTOR)}
+GLOBAL_LOCK = Event()
 BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='✅ INSTABOT start')
 
 
@@ -134,9 +136,14 @@ def read_message(message):
         username = message.text.lower().strip()
         if valid_username(username):
             if not loader.LOCK.is_set():
-                loader.LOCK.set()
-                status_bar = BOT.send_message(message.chat.id, text='Делаю запрос...')
-                EXECUTOR.submit(lambda: loader.search_profile(username, status_bar))
+                if not GLOBAL_LOCK.is_set():
+                    loader.LOCK.set()
+                    GLOBAL_LOCK.set()
+                    status_bar = BOT.send_message(message.chat.id, text='Делаю запрос...')
+                    EXECUTOR.submit(lambda: loader.search_profile(username, status_bar, GLOBAL_LOCK))
+                else:
+                    text = '❌ Обожди немного - я делаю другой запрос. Попробуй ещё раз через 30 секунд'
+                    BOT.send_message(message.chat.id, text=text)
         else:
             BOT.send_message(message.chat.id, text=f'❌ "{message.text}" - некорректный никнейм')
     else:
@@ -149,10 +156,15 @@ def query(callback_query):
     loader = LOADERS.get(callback_query.message.chat.id)
     if loader:
         if not loader.LOCK.is_set():
-            loader.LOCK.set()
-            status_bar = BOT.send_message(callback_query.message.chat.id, text='Делаю запрос...')
-            username = callback_query.data.split('|')[1]
-            EXECUTOR.submit(lambda: loader.search_profile(username, status_bar))
+            if not GLOBAL_LOCK.is_set():
+                loader.LOCK.set()
+                GLOBAL_LOCK.set()
+                status_bar = BOT.send_message(callback_query.message.chat.id, text='Делаю запрос...')
+                username = callback_query.data.split('|')[1]
+                EXECUTOR.submit(lambda: loader.search_profile(username, status_bar, GLOBAL_LOCK))
+            else:
+                text = '❌ Обожди немного - я делаю другой запрос. Попробуй ещё раз через 30 секунд'
+                BOT.send_message(callback_query.message.chat.id, text=text)
     else:
         BOT.send_message(callback_query.message.chat.id, text='Нет доступа')
         BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='Левый пользователь. Лог:\n\n' + str(callback_query.message))
@@ -163,11 +175,16 @@ def hornet(callback_query):
     loader = LOADERS.get(callback_query.message.chat.id)
     if loader:
         if not loader.LOCK.is_set():
-            loader.LOCK.set()
-            callback_type, username, time_create = callback_query.data.split('|')
-            status_bar = BOT.send_message(callback_query.message.chat.id, text='Загружаю сторис...')
-            EXECUTOR.submit(lambda: loader.download_stories(callback_type, username, status_bar,
-                                                            callback_query.message, time_create))
+            if not GLOBAL_LOCK.is_set():
+                loader.LOCK.set()
+                GLOBAL_LOCK.set()
+                callback_type, username, time_create = callback_query.data.split('|')
+                status_bar = BOT.send_message(callback_query.message.chat.id, text='Загружаю сторис...')
+                EXECUTOR.submit(lambda: loader.download_stories(callback_type, username, status_bar,
+                                                                callback_query.message, time_create, GLOBAL_LOCK))
+            else:
+                text = '❌ Обожди немного - я делаю другой запрос. Попробуй ещё раз через 30 секунд'
+                BOT.send_message(callback_query.message.chat.id, text=text)
     else:
         BOT.send_message(callback_query.message.chat.id, text='Нет доступа')
         BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='Левый пользователь. Лог:\n\n' + str(callback_query.message))
@@ -177,21 +194,17 @@ def hornet(callback_query):
 def remove_history(callback_query):
     loader = LOADERS.get(callback_query.message.chat.id)
     if loader:
-        if not loader.LOCK.is_set():
-            loader.LOCK.set()
-            telegram_id = callback_query.message.chat.id
-            mode, username, time_created = callback_query.data.split('|')
-            refresh_usernames = SERVICE.remove_profile(telegram_id, username)
-            markup = get_menu_markup(callback_query.message, mode, refresh_usernames)
+        telegram_id = callback_query.message.chat.id
+        mode, username, time_created = callback_query.data.split('|')
+        refresh_usernames = SERVICE.remove_profile(telegram_id, username)
+        markup = get_menu_markup(callback_query.message, mode, refresh_usernames)
 
-            if markup:
-                text = create_text_menu(mode)
-                BOT.edit_message_text(text, callback_query.message.chat.id, callback_query.message.message_id, reply_markup=markup)
-            else:
-                text = '🧐 Здесь будет меню, когда ты сделаешь хотя бы 1 запрос'
-                BOT.edit_message_text(text, callback_query.message.chat.id, callback_query.message.message_id)
-
-            loader.LOCK.clear()
+        if markup:
+            text = create_text_menu(mode)
+            BOT.edit_message_text(text, callback_query.message.chat.id, callback_query.message.message_id, reply_markup=markup)
+        else:
+            text = '🧐 Здесь будет меню, когда ты сделаешь хотя бы 1 запрос'
+            BOT.edit_message_text(text, callback_query.message.chat.id, callback_query.message.message_id)
     else:
         BOT.send_message(callback_query.message.chat.id, text='Нет доступа')
         BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='Левый пользователь. Лог:\n\n' + str(callback_query.message))

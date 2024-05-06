@@ -3,7 +3,7 @@ from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from dtos import ProfileResponse, StoryResponseInstaloader
 import time
 from threading import Event
-from src.python.utils import files_handler
+from utils import delete_stories_handler
 
 
 class ResponseHandler:
@@ -41,7 +41,8 @@ class ResponseHandler:
 
         self.LOCK.clear()
 
-    def hornet_handler(self, response: StoryResponseInstaloader, message: Message, loader_name: str | None = None):
+    def hornet_handler(self, response: StoryResponseInstaloader, message: Message,
+                       loader_name: str | None = None, login_bool: bool | None = None):
         text_message: str
         if response.type == 'has_stories':
             for story_data in response.story_data_array:
@@ -52,7 +53,7 @@ class ResponseHandler:
                     with open(story_data.path, 'rb') as video:
                         self.BOT.send_video(message.chat.id, video)
 
-            files_handler(response.story_data_array, response.folder_stories)
+            delete_stories_handler(response.story_data_array, response.folder_stories)
 
             if not response.story_data_array:
                 if response.count_stories == 1:
@@ -93,7 +94,8 @@ class ResponseHandler:
             )
 
         if response.type != 'error_loader':
-            text_for_admin = f'✅ Успешный поиск сторис у {message.chat.first_name} с помощью аккаунта {loader_name}'
+            text_for_admin = (f'✅ Успешный поиск сторис у {message.chat.first_name} с помощью аккаунта {loader_name}, '
+                              f'login_bool:{login_bool}')
             self.BOT.send_message(self.ADMIN_ID, text=text_for_admin)
 
         self.LOCK.clear()

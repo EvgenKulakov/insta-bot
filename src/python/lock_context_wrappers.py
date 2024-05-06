@@ -21,29 +21,31 @@ class InstaloaderWrapper:
 
     def profile_from_username(self, username: str, telegram_id: int) -> Profile | None:
         with self.LOCK:
-            success_fail = self.SERVICE.get_success_fail(username)
-            if success_fail:
-                if success_fail.type == 'success':
-                    profile = Profile(self.INSTALOADER.context, {'username': username})
-                    self.SERVICE.add_profile(telegram_id, username)
-                    return profile
-                if success_fail.type == 'fail':
-                    return None
-            else:
-                try:
-                    profile = Profile.from_username(self.INSTALOADER.context, username)
-                    self.SERVICE.add_profile(telegram_id, username)
-                    self.SERVICE.add_success_fail(username, 'success')
-                    return profile
-                except ProfileNotExistsException:
-                    self.SERVICE.add_success_fail(username, 'fail')
-                    return None
+            with ProxyContext(self.PROXY):
+                success_fail = self.SERVICE.get_success_fail(username)
+                if success_fail:
+                    if success_fail.type == 'success':
+                        profile = Profile(self.INSTALOADER.context, {'username': username})
+                        self.SERVICE.add_profile(telegram_id, username)
+                        return profile
+                    if success_fail.type == 'fail':
+                        return None
+                else:
+                    try:
+                        profile = Profile.from_username(self.INSTALOADER.context, username)
+                        self.SERVICE.add_profile(telegram_id, username)
+                        self.SERVICE.add_success_fail(username, 'success')
+                        return profile
+                    except ProfileNotExistsException:
+                        self.SERVICE.add_success_fail(username, 'fail')
+                        return None
 
 
     def loader_get_stories(self, userid: int) -> Story | None:
         with self.LOCK:
-            story = next(self.INSTALOADER.get_stories([userid]), None)
-            return story
+            with ProxyContext(self.PROXY):
+                story = next(self.INSTALOADER.get_stories([userid]), None)
+                return story
 
 
     def get_raw_dynamic_login(self, url: str, login: bool):

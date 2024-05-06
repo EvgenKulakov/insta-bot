@@ -74,12 +74,12 @@ def create_text_menu(mode: str) -> str:
 
 def get_start_text():
     return (f'<b>Привет, я Инстаграмный шершень</b>'
-            f'\n\n🔍 Введи username пользователя instagram, чтобы сделать запрос.'
+            f'\n\n🔍 Введи username пользователя Instagram, чтобы сделать запрос.'
             f'\n\n🔍 🐝 ❌ Нажми /menu, чтобы быстро делать запросы для тех пользователей, которые искались ранее.'
             f'\n\n🧐 Кнопка /start только для приветственного текста, чтобы сделать запрос её нажимать не нужно.')
 
 
-def files_handler(story_data_array: List[StoryDataInstaloader], folder_stories: str):
+def delete_stories_handler(story_data_array: List[StoryDataInstaloader], folder_stories: str):
 
     for story_data in story_data_array:
         os.truncate(story_data.path, 0)
@@ -89,3 +89,10 @@ def files_handler(story_data_array: List[StoryDataInstaloader], folder_stories: 
         if datetime.now() - date_story > timedelta(days=2):
             file_path = os.path.join(folder_stories, file_name)
             os.remove(file_path)
+
+
+def get_avatar_path(folder_path: str):
+    file_list = os.listdir(folder_path)
+    file_name = file_list[-1]
+    file_path = os.path.join(folder_path, file_name)
+    return file_path

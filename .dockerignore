@@ -5,3 +5,6 @@
 info.txt
 *.cpython-312.pyc
 src/arhive
+/cache/*
+/src/resources/*
+/data/*

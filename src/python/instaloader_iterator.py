@@ -1,6 +1,6 @@
 from typing import List
 from threading import Lock
-from instaloader_lock_wrapper import InstaloaderWrapper
+from lock_context_wrappers import InstaloaderWrapper
 
 
 class InstaloaderIterator:
@@ -13,14 +13,21 @@ class InstaloaderIterator:
         self.INDEX = 0
         self.LOCK = Lock()
 
-    def __next__(self):
-        if len(self.INSTALOADERS) > 0:
-            with self.LOCK:
-                result = self.INSTALOADERS[self.INDEX]
+    def next(self):
+        with self.LOCK:
+            if len(self.INSTALOADERS) > 0:
                 self.INDEX = (self.INDEX + 1) % len(self.INSTALOADERS)
+                result = self.INSTALOADERS[self.INDEX]
                 return result
-        else:
-            return None
+            else:
+                return None
+
+    def get_without_iteration(self):
+        with self.LOCK:
+            if len(self.INSTALOADERS) > 0:
+                    return self.INSTALOADERS[self.INDEX]
+            else:
+                return None
 
     def add(self, instaloader):
         with self.LOCK:

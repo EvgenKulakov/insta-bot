@@ -5,43 +5,42 @@ from telebot.types import Message, InlineKeyboardMarkup
 import configparser
 from instaloader_api import Loader
 from instaloader_iterator import InstaloaderIterator
+from profiles_cache import ProfilesCache
 from utils import valid_username, create_text_menu, get_start_text
 import time
 from database_service import Service
 from concurrent.futures import ThreadPoolExecutor
-from instaloader_lock_wrapper import InstaloaderWrapper
-import os
+from lock_context_wrappers import InstaloaderWrapper, ProxyContext
 from threading import Event
 
 properties = configparser.ConfigParser()
-properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
-
-proxy_url = properties['PROXY']['PROXY_URL']
-os.environ['HTTP_PROXY'] = proxy_url
-os.environ['HTTPS_PROXY'] = proxy_url
+properties.read('src/resources/application.properties')
 
 SERVICE = Service(properties)
 
 def loaders_init() -> InstaloaderIterator:
-    user_1 = properties['INSTAGRAM']['USER_1']
-    user_2 = properties['INSTAGRAM']['USER_2']
-    session_token_1 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
-    session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-2'
-    loader_without_login = Instaloader()
-    instaloader_1 = Instaloader()
-    instaloader_1.load_session_from_file(user_1, session_token_1)
-    instaloader_wrapper_1 = InstaloaderWrapper(instaloader_1, loader_without_login, SERVICE)
-    instaloader_2 = Instaloader()
-    instaloader_2.load_session_from_file(user_2, session_token_2)
-    instaloader_wrapper_2 = InstaloaderWrapper(instaloader_2,loader_without_login, SERVICE)
-    return InstaloaderIterator([instaloader_wrapper_1, instaloader_wrapper_2])
+    proxy_url = properties['PROXY']['PROXY_URL']
+    with ProxyContext(proxy_url):
+        user_1 = properties['INSTAGRAM']['USER_1']
+        user_2 = properties['INSTAGRAM']['USER_2']
+        session_token_1 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
+        session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-2'
+        loader_without_login = Instaloader()
+        instaloader_1 = Instaloader()
+        instaloader_1.load_session_from_file(user_1, session_token_1)
+        instaloader_wrapper_1 = InstaloaderWrapper(instaloader_1, loader_without_login, SERVICE, proxy_url)
+        instaloader_2 = Instaloader()
+        instaloader_2.load_session_from_file(user_2, session_token_2)
+        instaloader_wrapper_2 = InstaloaderWrapper(instaloader_2,loader_without_login, SERVICE, proxy_url)
+        return InstaloaderIterator([instaloader_wrapper_1, instaloader_wrapper_2])
 
 INSTALOADERS = loaders_init()
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])
 EXECUTOR = ThreadPoolExecutor()
-LOADERS = {int(properties['TELEGRAM']['ADMIN_ID']): Loader(properties, INSTALOADERS, BOT, EXECUTOR),
-           int(properties['TELEGRAM']['ANNA_ID']): Loader(properties, INSTALOADERS, BOT, EXECUTOR),
-           int(properties['TELEGRAM']['DASHA_ID']): Loader(properties, INSTALOADERS, BOT, EXECUTOR)}
+PROFILES_CACHE = ProfilesCache()
+LOADERS = {int(properties['TELEGRAM']['ADMIN_ID']): Loader(properties, INSTALOADERS, BOT, EXECUTOR, PROFILES_CACHE),
+           int(properties['TELEGRAM']['ANNA_ID']): Loader(properties, INSTALOADERS, BOT, EXECUTOR, PROFILES_CACHE),
+           int(properties['TELEGRAM']['DASHA_ID']): Loader(properties, INSTALOADERS, BOT, EXECUTOR, PROFILES_CACHE)}
 GLOBAL_LOCK = Event()
 BOT.send_message(properties['TELEGRAM']['ADMIN_ID'], text='✅ INSTABOT start')
 

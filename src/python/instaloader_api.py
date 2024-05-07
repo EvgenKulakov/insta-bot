@@ -133,7 +133,7 @@ class Loader:
             event = Event()
             self.download_status_bar(message, status_bar, 'Поиск фото', event)
             try:
-                resp = self.CURRENT_LOADER.get_raw_dynamic_login(self.CURRENT_PROFILE.profile_pic_url, True)
+                resp = self.CURRENT_LOADER.get_raw_login(self.CURRENT_PROFILE.profile_pic_url)
                 event.set()
                 time.sleep(0.1)
                 status_bar += '\n✅ Фото профиля'
@@ -147,7 +147,7 @@ class Loader:
                 avatar_path = os.path.join(folder_avatar, filename)
 
                 if not os.path.exists(avatar_path):
-                    self.CURRENT_LOADER.write_raw_dynamic_login(resp, avatar_path, True)
+                    self.CURRENT_LOADER.write_raw_login(resp, avatar_path)
                     print()
 
                 self.PROFILES_CACHE.put_profile(self.CURRENT_PROFILE)
@@ -301,11 +301,11 @@ class Loader:
             status_bar += f'\n\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
         self.BOT.edit_message_text(status_bar, status_message.chat.id, status_message.message_id)
 
-        login_bool = random.choice([True, False])
+        proxy_bool = random.random() < 4/5
         try:
             for story_data in story_data_array:
-                resp = self.CURRENT_LOADER.get_raw_dynamic_login(story_data.url, login_bool)
-                self.CURRENT_LOADER.write_raw_dynamic_login(resp, story_data.path, login_bool)
+                resp = self.CURRENT_LOADER.get_raw_dynamic_proxy(story_data.url, proxy_bool)
+                self.CURRENT_LOADER.write_raw_dynamic_proxy(resp, story_data.path, proxy_bool)
                 print()
                 status_bar = status_bar.replace(f'[{count_downloads}/{len(story_data_array)}]',
                                                 f'[{count_downloads + 1}/{len(story_data_array)}]')
@@ -313,7 +313,7 @@ class Loader:
                 count_downloads += 1
         except Exception as exception:
             GLOBAL_LOCK.clear()
-            text_for_admin = (f'НЕОБРАБОТАНЫЙ обсёр во время загрузки сториз: dynamic_context(login_bool:{login_bool}) '
+            text_for_admin = (f'НЕОБРАБОТАНЫЙ обсёр во время загрузки сториз: dynamic_context(proxy_bool:{proxy_bool}) '
                               f'{src_message.chat.first_name}\nлог: {exception}')
             self.BOT.send_message(self.ADMIN_ID, text=text_for_admin)
             text_message = '❌ В данный момент нет ответа от Instagram, попробуй сделать запрос позже — через 15-20 минут.'
@@ -324,7 +324,7 @@ class Loader:
         response = StoryResponseInstaloader('has_stories', callback_type, username, self.CURRENT_PROFILE.full_name,
                                             story_data_array, self.CURRENT_STORY.itemcount, count_viewed, folder_stories)
         self.CURRENT_STORY = None
-        self.RESPONSE_HANDLER.hornet_handler(response, src_message, self.CURRENT_LOADER.get_loader_username(), login_bool)
+        self.RESPONSE_HANDLER.hornet_handler(response, src_message, self.CURRENT_LOADER.get_loader_username(), proxy_bool)
 
 
     def download_status_bar(self, message: Message, status_bar: str, text_search: str,

@@ -8,3 +8,4 @@ src/arhive
 /cache/*
 /src/resources/*
 /data/*
+src/python/test.py

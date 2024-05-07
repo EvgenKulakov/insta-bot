@@ -48,22 +48,34 @@ class InstaloaderWrapper:
                 return story
 
 
-    def get_raw_dynamic_login(self, url: str, login: bool):
+    def get_raw_dynamic_proxy(self, url: str, proxy: bool):
         with self.LOCK:
-            with ProxyContext(self.PROXY):
-                if login:
-                    return self.INSTALOADER.context.get_raw(url)
-                else:
+            if proxy:
+                with ProxyContext(self.PROXY):
                     return self.INSTALOADER_WITHOUT_LOGIN.context.get_raw(url)
+            else:
+                return self.INSTALOADER_WITHOUT_LOGIN.context.get_raw(url)
 
 
-    def write_raw_dynamic_login(self, resp: requests.Request, path: str, login: bool):
+    def write_raw_dynamic_proxy(self, resp: requests.Request, path: str, proxy: bool):
+        with self.LOCK:
+            if proxy:
+                with ProxyContext(self.PROXY):
+                    self.INSTALOADER_WITHOUT_LOGIN.context.write_raw(resp, path)
+            else:
+                self.INSTALOADER_WITHOUT_LOGIN.context.write_raw(resp, path)
+
+
+    def get_raw_login(self, url: str):
         with self.LOCK:
             with ProxyContext(self.PROXY):
-                if login:
-                    self.INSTALOADER.context.write_raw(resp, path)
-                else:
-                    self.INSTALOADER_WITHOUT_LOGIN.context.write_raw(resp, path)
+                return self.INSTALOADER.context.get_raw(url)
+
+
+    def write_raw_login(self, resp: requests.Request, path: str):
+        with self.LOCK:
+            with ProxyContext(self.PROXY):
+                self.INSTALOADER.context.write_raw(resp, path)
 
 
     def get_loader_username(self):

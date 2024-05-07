@@ -42,7 +42,7 @@ class ResponseHandler:
         self.LOCK.clear()
 
     def hornet_handler(self, response: StoryResponseInstaloader, message: Message,
-                       loader_name: str | None = None, login_bool: bool | None = None):
+                       loader_name: str | None = None, proxy_bool: bool | None = None):
         text_message: str
         if response.type == 'has_stories':
             for story_data in response.story_data_array:
@@ -95,7 +95,7 @@ class ResponseHandler:
 
         if response.type != 'error_loader':
             text_for_admin = (f'✅ Успешный поиск сторис у {message.chat.first_name} с помощью аккаунта {loader_name}, '
-                              f'login_bool:{login_bool}')
+                              f'proxy_bool:{proxy_bool}')
             self.BOT.send_message(self.ADMIN_ID, text=text_for_admin)
 
         self.LOCK.clear()

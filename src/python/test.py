@@ -217,7 +217,6 @@ def get_menu_markup(message, mode: str, usernames = None):
         return markup
     else:
         return None
-
 def test_proxy():
     proxy_url = properties['PROXY']['PROXY_URL']
 
@@ -238,7 +237,11 @@ def test_proxy():
     else:
         print("Ошибка при получении IP адреса:", response.status_code)
 
-test_proxy()
+def test_random():
+    for _ in range(0, 10):
+        proxy_bool = random.random() < 4 / 5
+        print(proxy_bool)
 
+test_random()
 
 # BOT.polling(none_stop=True)

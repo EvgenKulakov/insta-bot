@@ -194,7 +194,7 @@ event = threading.Event()
 
 def get_menu_markup(message, mode: str, usernames = None):
     if not usernames:
-        usernames = SERVICE.get_profiles(message.chat.id)
+        usernames = SERVICE.get_history(message.chat.id)
 
     if len(usernames) > 0:
         mode_smiles = {'query': '🔍 ', 'analyzeNew': '🐝 ', 'remove': '❌ '}

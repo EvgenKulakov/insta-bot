@@ -196,7 +196,10 @@ class Loader:
             self.CURRENT_LOADER = self.INSTALOADERS.next()
 
             if not self.CURRENT_PROFILE or self.CURRENT_PROFILE.username != username:
+
                 self.CURRENT_PROFILE = self.PROFILES_CACHE.get_profile(username)
+                if not self.CURRENT_PROFILE:
+                    self.CURRENT_PROFILE = self.CURRENT_LOADER.get_profile_cache(username)
 
                 if not self.CURRENT_PROFILE:
                     event = Event()

@@ -32,21 +32,30 @@ class ProfileDTO:
     username: str
     full_name: str
     userid: int
-    is_private: bool
-    followers: int
-    followees: int
-    biography: str
-    profile_pic_url: str
+    is_private: bool | None
+    followers: int | None
+    followees: int | None
+    biography: str | None
+    profile_pic_url: str | None
+    success: str | None
 
-    def __init__(self, profile: Profile):
-        self.username = profile.username
-        self.full_name = profile.full_name
-        self.userid = profile.userid
-        self.is_private = profile.is_private
-        self.followers = profile.followers
-        self.followees = profile.followees
-        self.biography = profile.biography
-        self.profile_pic_url = profile.profile_pic_url
+    def __init__(self, profile: Profile | None = None, username: str | None = None,
+                 full_name: str | None = None, userid: int | None = None, success: str | None = None):
+        if profile:
+            self.username = profile.username
+            self.full_name = profile.full_name
+            self.userid = profile.userid
+            self.is_private = profile.is_private
+            self.followers = profile.followers
+            self.followees = profile.followees
+            self.biography = profile.biography
+            self.profile_pic_url = profile.profile_pic_url
+            self.success = 'success'
+        else:
+            self.username = username
+            self.full_name = full_name
+            self.userid = userid
+            self.success = success
 
 
 class UserData:
@@ -119,12 +128,3 @@ class StoryResponseInstaloader:
         self.count_stories = count_stories
         self.count_viewed = count_viewed
         self.folder_stories = folder_stories
-
-
-class SuccessFailDTO:
-    username: str
-    type: str
-
-    def __init__(self, username: str, type: str):
-        self.username = username
-        self.type = type

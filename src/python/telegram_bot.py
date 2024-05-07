@@ -75,7 +75,7 @@ def show_menu(message):
 
 def get_menu_markup(message: Message, mode: str, usernames: List[str] | None = None) -> InlineKeyboardMarkup | None:
     if not usernames:
-        usernames = SERVICE.get_profiles(message.chat.id)
+        usernames = SERVICE.get_history(message.chat.id)
 
     if len(usernames) > 0:
         mode_smiles = {'query': '🔍 ', 'analyzeNew': '🐝 ', 'remove': '❌ '}
@@ -195,7 +195,7 @@ def remove_history(callback_query):
     if loader:
         telegram_id = callback_query.message.chat.id
         mode, username, time_created = callback_query.data.split('|')
-        refresh_usernames = SERVICE.remove_profile(telegram_id, username)
+        refresh_usernames = SERVICE.remove_history(telegram_id, username)
         markup = get_menu_markup(callback_query.message, mode, refresh_usernames)
 
         if markup:

@@ -3,6 +3,7 @@ import requests
 from instaloader import Instaloader, Profile, ProfileNotExistsException, Story
 from threading import Lock
 from database_service import Service
+from dtos import ProfileDTO
 
 
 class InstaloaderWrapper:
@@ -22,23 +23,30 @@ class InstaloaderWrapper:
     def profile_from_username(self, username: str, telegram_id: int) -> Profile | None:
         with self.LOCK:
             with ProxyContext(self.PROXY):
-                success_fail = self.SERVICE.get_success_fail(username)
-                if success_fail:
-                    if success_fail.type == 'success':
+                profileDTO = self.SERVICE.get_profile_cache(username)
+                if profileDTO:
+                    if profileDTO.success == 'success':
                         profile = Profile(self.INSTALOADER.context, {'username': username})
-                        self.SERVICE.add_profile(telegram_id, username)
+                        self.SERVICE.add_history(telegram_id, username)
+                        self.SERVICE.add_profile_in_cache(profile.username, profile.full_name, profile.userid)
                         return profile
-                    if success_fail.type == 'fail':
+                    if profileDTO.success == 'fail':
                         return None
                 else:
                     try:
                         profile = Profile.from_username(self.INSTALOADER.context, username)
-                        self.SERVICE.add_profile(telegram_id, username)
-                        self.SERVICE.add_success_fail(username, 'success')
+                        self.SERVICE.add_history(telegram_id, username)
+                        self.SERVICE.add_profile_in_cache(profile.username, profile.full_name, profile.userid)
                         return profile
                     except ProfileNotExistsException:
-                        self.SERVICE.add_success_fail(username, 'fail')
+                        self.SERVICE.add_fail_in_cache(username)
                         return None
+
+
+    def get_profile_cache(self, username: str) -> ProfileDTO | None:
+        with self.LOCK:
+            profileDTO = self.SERVICE.get_profile_cache(username)
+            return profileDTO
 
 
     def loader_get_stories(self, userid: int) -> Story | None:

@@ -9,3 +9,4 @@ src/arhive
 /src/resources/*
 /data/*
 src/python/test.py
+src/migrations

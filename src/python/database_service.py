@@ -2,7 +2,7 @@ import sqlite3
 from configparser import ConfigParser
 from typing import List
 from threading import Lock
-from dtos import SuccessFailDTO
+from dtos import ProfileDTO
 
 
 class Service:
@@ -14,7 +14,7 @@ class Service:
         self.DATABASE_PATH = self.PROPERTIES['PATHS']['PATH_OS'] + 'data/profiles.db'
         self.LOCK = Lock()
 
-    def add_profile(self, telegram_id: int, username: str):
+    def add_history(self, telegram_id: int, username: str):
         with self.LOCK:
             conn = sqlite3.connect(self.DATABASE_PATH)
             cursor = conn.cursor()
@@ -32,7 +32,7 @@ class Service:
             cursor.close()
             conn.close()
 
-    def get_profiles(self, telegram_id: int) -> List[str]:
+    def get_history(self, telegram_id: int) -> List[str]:
         with self.LOCK:
             conn = sqlite3.connect(self.DATABASE_PATH)
             cursor = conn.cursor()
@@ -44,7 +44,7 @@ class Service:
             conn.close()
             return usernames
 
-    def remove_profile(self, telegram_id: int, username: str) -> List[str]:
+    def remove_history(self, telegram_id: int, username: str) -> List[str]:
         with self.LOCK:
             conn = sqlite3.connect(self.DATABASE_PATH)
             cursor = conn.cursor()
@@ -68,31 +68,51 @@ class Service:
             conn.close()
             return usernames
 
-    def add_success_fail(self, username: str, type: str):
+
+    def add_profile_in_cache(self, username: str, full_name: str, userid: int):
         with self.LOCK:
             conn = sqlite3.connect(self.DATABASE_PATH)
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO success_fail_profiles (username, type)
-                VALUES (?, ?)
+                INSERT INTO profiles_cache (username, full_name, userid, success)
+                VALUES (?, ?, ?, ?)
                 """,
-                (username, type)
+                (username, full_name, userid, 'success')
             )
             conn.commit()
             cursor.close()
             conn.close()
 
-    def get_success_fail(self, username: str):
+
+    def add_fail_in_cache(self, username: str):
+        conn = sqlite3.connect(self.DATABASE_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO profiles_cache (username, success)
+            VALUES (?, ?)
+            """,
+            (username, 'fail')
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    def get_profile_cache(self, username: str) -> ProfileDTO | None:
         with self.LOCK:
             conn = sqlite3.connect(self.DATABASE_PATH)
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM success_fail_profiles WHERE username = ?", (username,))
+            cursor.execute("SELECT * FROM profiles_cache WHERE username = ?", (username,))
             row = cursor.fetchone()
             cursor.close()
             conn.close()
 
             if row:
-                return SuccessFailDTO(row[1], row[2])
-            else:
-                return None
+                if row[4] == 'success':
+                    profile = ProfileDTO(username=row[1], full_name=row[2], userid=row[3], success=row[4])
+                    return profile
+                if row[4] == 'fail':
+                    profile = ProfileDTO(username=row[1], success=row[4])
+                    return profile
+            else: return None

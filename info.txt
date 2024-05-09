@@ -9,9 +9,10 @@ scp <filepath> root@<ipserver>:<volumepath>
 import sqlite3
 conn = sqlite3.connect('data/profiles.db')
 cursor = conn.cursor()
-cursor.execute('SELECT * FROM success_fail_profiles')
+cursor.execute('SELECT * FROM profiles_cache')
 rows = cursor.fetchall()
 for row in rows:
     print(row)
 
+conn.commit()
 conn.close()

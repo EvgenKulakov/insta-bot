@@ -86,6 +86,7 @@ class Loader:
                 text_message = f'Аккаунта "{username}" нет в инстаграм'
                 self.RESPONSE_HANDLER.query_handler(ProfileResponse('error', text_message), message)
         else:
+            self.CURRENT_PROFILE = self.PROFILES_CACHE.get_profile(username)
             status_bar += '\n✅ Аккаунт найден'
             self.BOT.edit_message_text(status_bar, message.chat.id, message.message_id)
             self.profile_data(username, message, status_bar, GLOBAL_LOCK)

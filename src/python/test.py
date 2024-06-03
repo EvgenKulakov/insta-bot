@@ -11,7 +11,6 @@ import concurrent.futures
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from instaloader import Instaloader
-from lock_context_wrappers import ProxyContext
 from utils import create_text_menu
 from database_service import Service
 from telebot import types
@@ -220,14 +219,13 @@ def get_menu_markup(message, mode: str, usernames = None):
 def test_proxy():
     proxy_url = properties['PROXY']['PROXY_URL']
 
-    with ProxyContext(proxy_url):
-        response = requests.get('https://api.ipify.org?format=json')
-        if response.status_code == 200:
-            data = response.json()
-            ip_address = data.get('ip')
-            print("IP адрес:", ip_address)
-        else:
-            print("Ошибка при получении IP адреса:", response.status_code)
+    response = requests.get('https://api.ipify.org?format=json')
+    if response.status_code == 200:
+        data = response.json()
+        ip_address = data.get('ip')
+        print("IP адрес:", ip_address)
+    else:
+        print("Ошибка при получении IP адреса:", response.status_code)
 
     response = requests.get('https://api.ipify.org?format=json')
     if response.status_code == 200:

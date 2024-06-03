@@ -10,37 +10,34 @@ class InstaloaderWrapper:
     INSTALOADER: Instaloader
     INSTALOADER_WITHOUT_LOGIN: Instaloader
     SERVICE: Service
-    PROXY: str
     LOCK: Lock
 
-    def __init__(self, instaloader: Instaloader, instaloader_without_login: Instaloader, service: Service, proxy: str):
+    def __init__(self, instaloader: Instaloader, instaloader_without_login: Instaloader, service: Service):
         self.INSTALOADER = instaloader
         self.INSTALOADER_WITHOUT_LOGIN = instaloader_without_login
         self.SERVICE = service
-        self.PROXY = proxy
         self.LOCK = Lock()
 
     def profile_from_username(self, username: str, telegram_id: int) -> Profile | None:
         with self.LOCK:
-            with ProxyContext(self.PROXY):
-                profileDTO = self.SERVICE.get_profile_cache(username)
-                if profileDTO:
-                    if profileDTO.success == 'success':
-                        profile = Profile(self.INSTALOADER.context, {'username': username})
-                        self.SERVICE.add_history(telegram_id, username)
-                        self.SERVICE.add_profile_in_cache(profile.username, profile.full_name, profile.userid)
-                        return profile
-                    if profileDTO.success == 'fail':
-                        return None
-                else:
-                    try:
-                        profile = Profile.from_username(self.INSTALOADER.context, username)
-                        self.SERVICE.add_history(telegram_id, username)
-                        self.SERVICE.add_profile_in_cache(profile.username, profile.full_name, profile.userid)
-                        return profile
-                    except ProfileNotExistsException:
-                        self.SERVICE.add_fail_in_cache(username)
-                        return None
+            profileDTO = self.SERVICE.get_profile_cache(username)
+            if profileDTO:
+                if profileDTO.success == 'success':
+                    profile = Profile(self.INSTALOADER.context, {'username': username})
+                    self.SERVICE.add_history(telegram_id, username)
+                    self.SERVICE.add_profile_in_cache(profile.username, profile.full_name, profile.userid)
+                    return profile
+                if profileDTO.success == 'fail':
+                    return None
+            else:
+                try:
+                    profile = Profile.from_username(self.INSTALOADER.context, username)
+                    self.SERVICE.add_history(telegram_id, username)
+                    self.SERVICE.add_profile_in_cache(profile.username, profile.full_name, profile.userid)
+                    return profile
+                except ProfileNotExistsException:
+                    self.SERVICE.add_fail_in_cache(username)
+                    return None
 
 
     def get_profile_cache(self, username: str) -> ProfileDTO | None:
@@ -51,39 +48,28 @@ class InstaloaderWrapper:
 
     def loader_get_stories(self, userid: int) -> Story | None:
         with self.LOCK:
-            with ProxyContext(self.PROXY):
-                story = next(self.INSTALOADER.get_stories([userid]), None)
-                return story
+            story = next(self.INSTALOADER.get_stories([userid]), None)
+            return story
 
 
-    def get_raw_dynamic_proxy(self, url: str, proxy: bool):
+    def get_raw_dynamic_proxy(self, url: str):
         with self.LOCK:
-            if proxy:
-                with ProxyContext(self.PROXY):
-                    return self.INSTALOADER_WITHOUT_LOGIN.context.get_raw(url)
-            else:
-                return self.INSTALOADER_WITHOUT_LOGIN.context.get_raw(url)
+            return self.INSTALOADER_WITHOUT_LOGIN.context.get_raw(url)
 
 
-    def write_raw_dynamic_proxy(self, resp: requests.Request, path: str, proxy: bool):
+    def write_raw_dynamic_proxy(self, resp: requests.Request, path: str):
         with self.LOCK:
-            if proxy:
-                with ProxyContext(self.PROXY):
-                    self.INSTALOADER_WITHOUT_LOGIN.context.write_raw(resp, path)
-            else:
-                self.INSTALOADER_WITHOUT_LOGIN.context.write_raw(resp, path)
+            self.INSTALOADER_WITHOUT_LOGIN.context.write_raw(resp, path)
 
 
     def get_raw_login(self, url: str):
         with self.LOCK:
-            with ProxyContext(self.PROXY):
-                return self.INSTALOADER.context.get_raw(url)
+            return self.INSTALOADER.context.get_raw(url)
 
 
     def write_raw_login(self, resp: requests.Request, path: str):
         with self.LOCK:
-            with ProxyContext(self.PROXY):
-                self.INSTALOADER.context.write_raw(resp, path)
+            self.INSTALOADER.context.write_raw(resp, path)
 
 
     def get_loader_username(self):

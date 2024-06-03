@@ -1,5 +1,4 @@
 import itertools
-import random
 from telebot import TeleBot
 from instaloader import Story
 from lock_context_wrappers import InstaloaderWrapper
@@ -305,11 +304,10 @@ class Loader:
             status_bar += f'\n\nЗагружено: [{count_downloads}/{len(story_data_array)}]'
         self.BOT.edit_message_text(status_bar, status_message.chat.id, status_message.message_id)
 
-        proxy_bool = random.random() < 4/5
         try:
             for story_data in story_data_array:
-                resp = self.CURRENT_LOADER.get_raw_dynamic_proxy(story_data.url, proxy_bool)
-                self.CURRENT_LOADER.write_raw_dynamic_proxy(resp, story_data.path, proxy_bool)
+                resp = self.CURRENT_LOADER.get_raw_dynamic_proxy(story_data.url)
+                self.CURRENT_LOADER.write_raw_dynamic_proxy(resp, story_data.path)
                 print()
                 status_bar = status_bar.replace(f'[{count_downloads}/{len(story_data_array)}]',
                                                 f'[{count_downloads + 1}/{len(story_data_array)}]')
@@ -317,7 +315,7 @@ class Loader:
                 count_downloads += 1
         except Exception as exception:
             GLOBAL_LOCK.clear()
-            text_for_admin = (f'НЕОБРАБОТАНЫЙ обсёр во время загрузки сториз: dynamic_context(proxy_bool:{proxy_bool}) '
+            text_for_admin = (f'НЕОБРАБОТАНЫЙ обсёр во время загрузки сториз: '
                               f'{src_message.chat.first_name}\nлог: {exception}')
             self.BOT.send_message(self.ADMIN_ID, text=text_for_admin)
             text_message = '❌ В данный момент нет ответа от Instagram, попробуй сделать запрос позже — через 15-20 минут.'
@@ -328,7 +326,7 @@ class Loader:
         response = StoryResponseInstaloader('has_stories', callback_type, username, self.CURRENT_PROFILE.full_name,
                                             story_data_array, self.CURRENT_STORY.itemcount, count_viewed, folder_stories)
         self.CURRENT_STORY = None
-        self.RESPONSE_HANDLER.hornet_handler(response, src_message, self.CURRENT_LOADER.get_loader_username(), proxy_bool)
+        self.RESPONSE_HANDLER.hornet_handler(response, src_message, self.CURRENT_LOADER.get_loader_username())
 
 
     def download_status_bar(self, message: Message, status_bar: str, text_search: str,

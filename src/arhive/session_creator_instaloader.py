@@ -1,17 +1,9 @@
-import configparser
-import os
 from argparse import ArgumentParser
 from glob import glob
 from os.path import expanduser
 from platform import system
 from sqlite3 import OperationalError, connect
 
-properties = configparser.ConfigParser()
-properties.read('/home/evgeniy/PycharmProjects/insta-bot/src/resources/application.properties')
-
-proxy_url = properties['PROXY']['PROXY_URL']
-os.environ['HTTP_PROXY'] = proxy_url
-os.environ['HTTPS_PROXY'] = proxy_url
 
 try:
     from instaloader import ConnectionException, Instaloader

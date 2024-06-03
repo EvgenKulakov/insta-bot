@@ -10,7 +10,7 @@ from utils import valid_username, create_text_menu, get_start_text
 import time
 from database_service import Service
 from concurrent.futures import ThreadPoolExecutor
-from lock_context_wrappers import InstaloaderWrapper, ProxyContext
+from lock_context_wrappers import InstaloaderWrapper
 from threading import Event
 
 properties = configparser.ConfigParser()
@@ -19,20 +19,23 @@ properties.read('src/resources/application.properties')
 SERVICE = Service(properties)
 
 def loaders_init() -> InstaloaderIterator:
-    proxy_url = properties['PROXY']['PROXY_URL']
-    with ProxyContext(proxy_url):
-        user_1 = properties['INSTAGRAM']['USER_1']
-        user_2 = properties['INSTAGRAM']['USER_2']
-        session_token_1 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
-        session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-2'
-        loader_without_login = Instaloader()
-        instaloader_1 = Instaloader()
-        instaloader_1.load_session_from_file(user_1, session_token_1)
-        instaloader_wrapper_1 = InstaloaderWrapper(instaloader_1, loader_without_login, SERVICE, proxy_url)
-        instaloader_2 = Instaloader()
-        instaloader_2.load_session_from_file(user_2, session_token_2)
-        instaloader_wrapper_2 = InstaloaderWrapper(instaloader_2,loader_without_login, SERVICE, proxy_url)
-        return InstaloaderIterator([instaloader_wrapper_1, instaloader_wrapper_2])
+    user_1 = properties['INSTAGRAM']['USER_1']
+    user_2 = properties['INSTAGRAM']['USER_2']
+    user_3 = properties['INSTAGRAM']['USER_3']
+    session_token_1 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-1'
+    session_token_2 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-2'
+    session_token_3 = properties['PATHS']['PATH_OS'] + 'src/resources/session-token-3'
+    loader_without_login = Instaloader()
+    instaloader_1 = Instaloader()
+    instaloader_1.load_session_from_file(user_1, session_token_1)
+    instaloader_wrapper_1 = InstaloaderWrapper(instaloader_1, loader_without_login, SERVICE)
+    instaloader_2 = Instaloader()
+    instaloader_2.load_session_from_file(user_2, session_token_2)
+    instaloader_wrapper_2 = InstaloaderWrapper(instaloader_2,loader_without_login, SERVICE)
+    instaloader_3 = Instaloader()
+    instaloader_3.load_session_from_file(user_3, session_token_3)
+    instaloader_wrapper_3 = InstaloaderWrapper(instaloader_2, loader_without_login, SERVICE)
+    return InstaloaderIterator([instaloader_wrapper_1, instaloader_wrapper_2, instaloader_wrapper_3])
 
 INSTALOADERS = loaders_init()
 BOT = telebot.TeleBot(properties['TELEGRAM']['BOT'])

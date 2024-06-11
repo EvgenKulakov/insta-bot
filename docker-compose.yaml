@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  insta-bot:
+    image: evgeniydockerman/insta-bot
+    restart: always
+    volumes:
+      - cache:/app/cache
+      - database:/app/data
+      - resources:/app/src/resources
+
+volumes:
+  cache:
+  database:
+  resources:

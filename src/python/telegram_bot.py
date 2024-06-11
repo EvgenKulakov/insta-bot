@@ -34,7 +34,7 @@ def loaders_init() -> InstaloaderIterator:
     instaloader_wrapper_2 = InstaloaderWrapper(instaloader_2,loader_without_login, SERVICE)
     instaloader_3 = Instaloader()
     instaloader_3.load_session_from_file(user_3, session_token_3)
-    instaloader_wrapper_3 = InstaloaderWrapper(instaloader_2, loader_without_login, SERVICE)
+    instaloader_wrapper_3 = InstaloaderWrapper(instaloader_3, loader_without_login, SERVICE)
     return InstaloaderIterator([instaloader_wrapper_1, instaloader_wrapper_2, instaloader_wrapper_3])
 
 INSTALOADERS = loaders_init()

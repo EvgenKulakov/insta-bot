@@ -10,3 +10,4 @@ src/arhive
 /data/*
 src/python/test.py
 src/migrations
+docker-compose.yaml

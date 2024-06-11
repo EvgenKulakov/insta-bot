@@ -2,7 +2,6 @@ pip freeze > requirements.txt
 pip install instaloader
 pip install pyTelegramBotAPI
 pip install async-executor
-docker run --restart always -v cache:/app/cache -v database:/app/data -v resources:/app/src/resources -d <image id or name>
 scp <filepath> root@<ipserver>:<volumepath>
 
 
